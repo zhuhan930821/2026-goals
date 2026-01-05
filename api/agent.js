@@ -1,57 +1,52 @@
 import { Client } from "@notionhq/client";
 import OpenAI from "openai";
 
-// Vercel Serverless Function 标准写法
 export default async function handler(req, res) {
-  // 1. 设置 CORS (允许前端访问)
+  // CORS 设置 (保持不变)
   res.setHeader('Access-Control-Allow-Credentials', true);
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
   res.setHeader('Access-Control-Allow-Headers', 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version');
 
-  // 处理预检请求 (OPTIONS)
-  if (req.method === 'OPTIONS') {
-    res.status(200).end();
-    return;
-  }
-
-  // 只允许 POST 请求
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method Not Allowed' });
-  }
+  if (req.method === 'OPTIONS') { res.status(200).end(); return; }
+  if (req.method !== 'POST') { return res.status(405).json({ error: 'Method Not Allowed' }); }
 
   try {
-    const { input } = req.body; // 注意：这里不是 req.json()
-
-    if (!process.env.NOTION_KEY || !process.env.OPENAI_API_KEY) {
-      throw new Error("Missing API Keys in server environment");
-    }
+    const { input } = req.body;
 
     const notion = new Client({ auth: process.env.NOTION_KEY });
-    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    
+    // --- 修改开始：切换到 Google 免费线路 ---
+    const openai = new OpenAI({ 
+      apiKey: process.env.OPENAI_API_KEY, // 这里一会儿去 Vercel 填 Google 的 Key
+      baseURL: "https://generativelanguage.googleapis.com/v1beta/openai/" // Google 的 OpenAI 兼容地址
+    });
 
-    // 2. 呼叫 AI
     const completion = await openai.chat.completions.create({
-      model: "gpt-4o",
-      response_format: { type: "json_object" },
+      model: "gemini-1.5-flash", // <--- 改用 Google 的免费模型 (速度极快)
+      response_format: { type: "json_object" }, 
       messages: [
         {
           role: "system",
           content: `你是一个 Notion 归档专家。分析用户输入，重组为 JSON。
-          输出字段:
-          - title: 标题
-          - category: 必须是 ["Reading", "Reflection", "Logic", "Music", "Generic"] 之一
-          - tags: 1-3个标签 (Array)
-          - summary: 一句话总结
-          - content: 清晰的 Markdown 格式内容`
+          
+          输出 JSON 格式要求:
+          {
+            "title": "简短标题",
+            "category": "必须是 Reading, Reflection, Logic, Music, Generic 其中之一",
+            "tags": ["tag1", "tag2"],
+            "summary": "一句话总结",
+            "content": "Markdown格式正文"
+          }`
         },
         { role: "user", content: input }
       ]
     });
+    // --- 修改结束 ---
 
     const aiData = JSON.parse(completion.choices[0].message.content);
 
-    // Markdown 转 Blocks 简单处理
+    // 下面 Notion 写入逻辑保持不变
     const convertMarkdownToBlocks = (text) => {
       if (!text) return [];
       return text.split('\n').filter(l => l.trim()).map(l => {
@@ -63,7 +58,6 @@ export default async function handler(req, res) {
       });
     };
 
-    // 3. 写入 Notion
     const response = await notion.pages.create({
       parent: { database_id: process.env.NOTION_DB_ID },
       properties: {
