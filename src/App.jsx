@@ -3,7 +3,7 @@ import {
   Dumbbell, Brain, Music, Bot, 
   BookOpen, AlertTriangle, Lightbulb, Mic, 
   ChevronRight, ArrowLeft, Save, Plus, Settings,
-  Search, Trash2, X, Play, Square, Activity, Trophy, Sparkles, Zap, Download, Upload, CheckCircle, Flame, Utensils, Minus
+  Search, Trash2, X, Play, Square, Activity, Trophy, Sparkles, Zap, Download, Upload, CheckCircle, Flame, Utensils, Minus, Edit2, Calendar
 } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 
@@ -89,14 +89,16 @@ const DataManager = () => {
 };
 
 // ==========================================
-// 🧩 模块 1: Body OS (Quantity Logic Added)
+// 🧩 模块 1: Body OS (History & Edit Fixed)
 // ==========================================
 const BodyModule = ({ goBack, addXP }) => {
   const theme = THEMES.body;
+  const [activeTab, setActiveTab] = useState('builder'); // 'builder' | 'history'
   const [history, setHistory] = useStorage('lifeos_body_history', []);
   const [weight, setWeight] = useState(60.0);
   
-  const [baseLibrary, setBaseLibrary] = useStorage('lifeos_body_lib_v4', {
+  // Library
+  const [baseLibrary, setBaseLibrary] = useStorage('lifeos_body_lib_v5', {
     carbs: [
       { name: '🌽 玉米', cal: 150 }, { name: '🍠 紫薯', cal: 130 }, 
       { name: '🍞 全麦面包', cal: 180 }, { name: '🥣 燕麦', cal: 140 }, { name: '🍌 香蕉', cal: 90 }
@@ -123,73 +125,91 @@ const BodyModule = ({ goBack, addXP }) => {
     machine: ['后抬腿', '蚌式开合', '侧向行走', '深蹲行走', '驴踢']
   });
 
-  // State now supports counts: [{ name: 'Corn', cal: 150, count: 2 }]
+  // State
   const [build, setBuild] = useState({ breakfast: [], lunch: [], dinner: [], workout: [] });
   const [selectedMoves, setSelectedMoves] = useState([]);
+  
+  // Editing State
   const [isEditing, setIsEditing] = useState(false);
+  const [editingItem, setEditingItem] = useState(null); // { cat, name, cal, isMove }
   const [newItemName, setNewItemName] = useState("");
   const [newItemCal, setNewItemCal] = useState(100);
   const [newCat, setNewCat] = useState("carbs");
 
-  // --- Quantity Logic ---
+  // --- Actions ---
   const updateCount = (slot, item, delta) => {
-    // Editing mode: Delete logic
     if (isEditing) {
-      if (window.confirm(`永久删除 "${item.name}"?`)) {
-        for (const k in baseLibrary) if (baseLibrary[k].some(i => i.name === item.name)) setBaseLibrary({...baseLibrary, [k]: baseLibrary[k].filter(i=>i.name!==item.name)});
-      }
+      // Open Edit Modal instead of deleting immediately
+      setEditingItem({ ...item, category: Object.keys(baseLibrary).find(k => baseLibrary[k].some(i=>i.name===item.name)) });
       return;
     }
-
-    // Normal mode: Increment/Decrement
     setBuild(prev => {
       const list = [...prev[slot]];
       const index = list.findIndex(i => i.name === item.name);
-      
       if (index > -1) {
-        // Exists, update count
         const newCount = list[index].count + delta;
-        if (newCount <= 0) {
-          list.splice(index, 1); // Remove if 0
-        } else {
-          list[index] = { ...list[index], count: newCount };
-        }
+        newCount <= 0 ? list.splice(index, 1) : (list[index] = { ...list[index], count: newCount });
       } else if (delta > 0) {
-        // New item
         list.push({ ...item, count: 1 });
       }
       return { ...prev, [slot]: list };
     });
   };
 
-  const getCount = (slot, itemName) => {
-    const item = build[slot].find(i => i.name === itemName);
-    return item ? item.count : 0;
+  const saveEdit = () => {
+    if (!editingItem) return;
+    const cat = editingItem.category;
+    // Update Library
+    const updatedList = baseLibrary[cat].map(i => 
+      i.name === editingItem.name ? { ...i, name: newItemName || i.name, cal: parseInt(newItemCal) || i.cal } : i
+    );
+    setBaseLibrary({ ...baseLibrary, [cat]: updatedList });
+    setEditingItem(null); setNewItemName(""); setNewItemCal(100);
+  };
+
+  const deleteEdit = () => {
+    if (!editingItem || !window.confirm(`Delete "${editingItem.name}"?`)) return;
+    const cat = editingItem.category;
+    setBaseLibrary({ ...baseLibrary, [cat]: baseLibrary[cat].filter(i => i.name !== editingItem.name) });
+    setEditingItem(null);
   };
 
   const toggleMove = (move) => { if (isEditing) return; setSelectedMoves(prev => prev.includes(move) ? prev.filter(i => i !== move) : [...prev, move]); };
   
   const addItem = () => {
     if(!newItemName) return;
-    if(['pilates','machine'].includes(newCat)) {
-       setMoveLibrary({...moveLibrary, [newCat]: [...moveLibrary[newCat], newItemName]});
-    } else {
-       const newObj = { name: newItemName, cal: parseInt(newItemCal) || 0 };
-       setBaseLibrary({...baseLibrary, [newCat]: [...baseLibrary[newCat], newObj]});
-    }
+    if(['pilates','machine'].includes(newCat)) setMoveLibrary({...moveLibrary, [newCat]: [...moveLibrary[newCat], newItemName]});
+    else setBaseLibrary({...baseLibrary, [newCat]: [...baseLibrary[newCat], { name: newItemName, cal: parseInt(newItemCal)||0 }]});
     setNewItemName("");
   };
 
   const handleSave = () => {
-    const record = { id: Date.now(), date: new Date().toLocaleDateString(), weight, build, detailedMoves: selectedMoves, type: 'body' };
+    const totalIntake = calculateTotal([...build.breakfast, ...build.lunch, ...build.dinner]);
+    const activeBurn = calculateTotal(build.workout);
+    const deficit = Math.round((weight * 22 * 1.2 + activeBurn) - totalIntake);
+
+    const record = { 
+      id: Date.now(), 
+      date: new Date().toLocaleDateString(), 
+      weight, 
+      build, 
+      detailedMoves: selectedMoves, 
+      stats: { totalIntake, activeBurn, deficit },
+      type: 'body' 
+    };
     setHistory([...history, record]);
-    addXP(20); alert("Body Logged! (+20 XP)");
+    addXP(20); 
+    setBuild({ breakfast: [], lunch: [], dinner: [], workout: [] }); // Reset
+    setSelectedMoves([]);
+    alert("✅ Saved to History!");
+    setActiveTab('history'); // Auto switch to history
   };
 
-  // 🔥 Calorie Calculation with Counts
-  const bmr = weight * 22 * 1.2;
+  // Helper
+  const getCount = (slot, itemName) => (build[slot].find(i => i.name === itemName) || {}).count || 0;
   const calculateTotal = (arr) => arr.reduce((acc, item) => acc + (item.cal * (item.count || 1)), 0);
   
+  // Current Stats
   const intakeStats = {
     carbs: calculateTotal([...build.breakfast, ...build.lunch, ...build.dinner].filter(i => baseLibrary.carbs.some(lib => lib.name === i.name))),
     protein: calculateTotal([...build.breakfast, ...build.lunch, ...build.dinner].filter(i => baseLibrary.protein.some(lib => lib.name === i.name))),
@@ -198,7 +218,7 @@ const BodyModule = ({ goBack, addXP }) => {
   };
   const totalIntake = calculateTotal([...build.breakfast, ...build.lunch, ...build.dinner]);
   const activeBurn = calculateTotal(build.workout);
-  const totalBurn = Math.round(bmr + activeBurn);
+  const totalBurn = Math.round((weight * 22 * 1.2) + activeBurn);
   const deficit = totalBurn - totalIntake;
 
   const showPilates = build.workout.some(i => i.name.includes('普拉提'));
@@ -211,30 +231,14 @@ const BodyModule = ({ goBack, addXP }) => {
         {types.map(t => baseLibrary[t]?.map(item => {
           const count = getCount(slot.toLowerCase(), item.name);
           return (
-            <button key={item.name} 
-              onClick={()=>updateCount(slot.toLowerCase(), item, 1)} 
+            <button key={item.name} onClick={()=>updateCount(slot.toLowerCase(), item, 1)} 
               className={`relative px-3 py-2 rounded-xl text-sm transition-all duration-300 shadow-sm border flex flex-col items-center min-w-[80px]
-                ${isEditing ? 'bg-red-50 border-red-200 text-red-500 hover:bg-red-100' : ''}
+                ${isEditing ? 'bg-indigo-50 border-indigo-200 text-indigo-600 hover:bg-indigo-100' : ''}
                 ${!isEditing && count > 0 ? 'bg-emerald-600 text-white border-emerald-500 shadow-emerald-200 shadow-lg transform -translate-y-1' : !isEditing && 'bg-white/80 hover:bg-white text-gray-600 border-white/50 hover:border-emerald-200'}`}>
-              
-              {/* Name & Kcal */}
               <span className="font-medium">{item.name}</span>
               <span className={`text-[10px] ${count > 0 ? 'text-emerald-100' : 'text-gray-400'}`}>{item.cal}k</span>
-              
-              {/* Badges */}
-              {isEditing && <X size={10} className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full"/>}
-              {!isEditing && count > 0 && (
-                <>
-                  <div className="absolute -top-2 -right-2 bg-yellow-400 text-black text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center shadow-sm">x{count}</div>
-                  {/* Minus Button Overlay (Click area prevention needs care, using absolute positioning) */}
-                  <div 
-                    onClick={(e) => { e.stopPropagation(); updateCount(slot.toLowerCase(), item, -1); }}
-                    className="absolute -top-2 -left-2 bg-red-500 text-white w-5 h-5 rounded-full flex items-center justify-center shadow-sm hover:bg-red-600 cursor-pointer"
-                  >
-                    <Minus size={10}/>
-                  </div>
-                </>
-              )}
+              {isEditing && <Edit2 size={10} className="absolute -top-1 -right-1 bg-indigo-500 text-white rounded-full p-0.5"/>}
+              {!isEditing && count > 0 && <><div className="absolute -top-2 -right-2 bg-yellow-400 text-black text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center shadow-sm">x{count}</div><div onClick={(e) => { e.stopPropagation(); updateCount(slot.toLowerCase(), item, -1); }} className="absolute -top-2 -left-2 bg-red-500 text-white w-5 h-5 rounded-full flex items-center justify-center shadow-sm hover:bg-red-600 cursor-pointer"><Minus size={10}/></div></>}
             </button>
           )
         }))}
@@ -247,98 +251,147 @@ const BodyModule = ({ goBack, addXP }) => {
       <BackgroundBlobs color="bg-emerald-300" />
       <Header title="Body OS" icon={Dumbbell} theme={theme} goBack={goBack} />
       
+      {/* 🟢 Navigation Tabs */}
+      <div className="max-w-6xl mx-auto mb-6 flex justify-center relative z-10">
+        <div className="glass-card p-1.5 flex gap-1 rounded-2xl">
+          <button onClick={() => setActiveTab('builder')} className={`flex items-center gap-2 px-6 py-2 rounded-xl text-sm font-bold transition-all ${activeTab === 'builder' ? 'bg-white shadow text-emerald-700' : 'text-gray-500 hover:text-gray-700'}`}><Plus size={16}/> Daily Builder</button>
+          <button onClick={() => setActiveTab('history')} className={`flex items-center gap-2 px-6 py-2 rounded-xl text-sm font-bold transition-all ${activeTab === 'history' ? 'bg-white shadow text-emerald-700' : 'text-gray-500 hover:text-gray-700'}`}><Calendar size={16}/> History Log</button>
+        </div>
+      </div>
+
       <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-6 relative z-10 pb-20">
         
-        {/* Left: Builder */}
-        <div className="lg:col-span-2 space-y-6">
-          <div className="glass-card p-4 flex justify-between items-center">
-             <div className="flex items-center gap-2">
-                <span className="font-medium text-gray-700 flex items-center gap-2 text-sm lg:text-base"><Activity size={18} className="text-emerald-500"/> Weight</span>
-                <div className="flex items-center gap-1"><input type="number" value={weight} onChange={e=>setWeight(e.target.value)} className="text-xl lg:text-2xl font-bold w-16 lg:w-20 text-right bg-transparent border-b border-gray-300 focus:outline-none focus:border-emerald-500 text-emerald-700"/> <span className="text-xs text-gray-400">kg</span></div>
-             </div>
-             <button onClick={()=>setIsEditing(!isEditing)} className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all flex items-center gap-1 ${isEditing ? 'bg-red-100 text-red-600 border-red-200' : 'bg-white text-gray-500 border-gray-200'}`}>
-               <Settings size={14}/> {isEditing ? 'Done' : 'Edit'}
-             </button>
-          </div>
+        {/* === BUILDER TAB === */}
+        {activeTab === 'builder' && (
+          <>
+            {/* Left: Builder */}
+            <div className="lg:col-span-2 space-y-6">
+              <div className="glass-card p-4 flex justify-between items-center">
+                 <div className="flex items-center gap-2"><span className="font-medium text-gray-700 flex items-center gap-2 text-sm lg:text-base"><Activity size={18} className="text-emerald-500"/> Morning Weight</span><div className="flex items-center gap-1"><input type="number" value={weight} onChange={e=>setWeight(e.target.value)} className="text-xl lg:text-2xl font-bold w-16 lg:w-20 text-right bg-transparent border-b border-gray-300 focus:outline-none focus:border-emerald-500 text-emerald-700"/> <span className="text-xs text-gray-400">kg</span></div></div>
+                 <button onClick={()=>setIsEditing(!isEditing)} className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all flex items-center gap-1 ${isEditing ? 'bg-indigo-100 text-indigo-600 border-indigo-200' : 'bg-white text-gray-500 border-gray-200'}`}><Settings size={14}/> {isEditing ? 'Done Editing' : 'Edit Library'}</button>
+              </div>
 
-          {isEditing && (
-            <div className="glass-card p-4 bg-white/80 animate-fade-in border-l-4 border-emerald-400">
-               <h4 className="text-xs font-bold text-gray-400 uppercase mb-2">➕ Add Custom Block</h4>
-               <div className="flex flex-col gap-2">
-                 <div className="flex gap-2">
-                    <select value={newCat} onChange={e=>setNewCat(e.target.value)} className="bg-white border-none rounded-lg text-sm p-2 font-bold text-gray-600 focus:ring-2 focus:ring-emerald-200 flex-1">
-                      <option value="carbs">🟡 Carbs</option><option value="protein">🔴 Protein</option><option value="veggie">🟢 Veggie</option><option value="fruit">🍎 Fruit</option><option value="workout">🔵 Workout</option>
-                      <option disabled>---</option><option value="pilates">🧘 Pilates Move</option><option value="machine">🍑 Machine Move</option>
-                    </select>
-                    <input value={newItemCal} type="number" onChange={e=>setNewItemCal(e.target.value)} placeholder="Kcal" className="w-20 bg-white border-none rounded-lg text-sm p-2 focus:ring-2 focus:ring-emerald-200"/>
-                 </div>
-                 <div className="flex gap-2">
-                    <input value={newItemName} onChange={e=>setNewItemName(e.target.value)} placeholder="Name (e.g. Quinoa)" className="flex-1 bg-white border-none rounded-lg text-sm p-2 focus:ring-2 focus:ring-emerald-200"/>
-                    <button onClick={addItem} className="bg-emerald-600 text-white px-4 rounded-lg font-bold text-sm">Add</button>
-                 </div>
+              {/* Edit Modal / Add Panel */}
+              {isEditing && (
+                <div className="glass-card p-4 bg-white/90 animate-fade-in border-l-4 border-indigo-400">
+                   {editingItem ? (
+                     <div className="space-y-3">
+                       <h4 className="text-xs font-bold text-indigo-500 uppercase">✏️ Edit: {editingItem.name}</h4>
+                       <div className="flex gap-2">
+                         <input value={newItemName || editingItem.name} onChange={e=>setNewItemName(e.target.value)} placeholder="Name" className="flex-1 bg-white border border-gray-200 rounded p-2 text-sm"/>
+                         <input type="number" value={newItemCal || editingItem.cal} onChange={e=>setNewItemCal(e.target.value)} placeholder="Cal" className="w-20 bg-white border border-gray-200 rounded p-2 text-sm"/>
+                         <button onClick={saveEdit} className="bg-indigo-600 text-white px-3 rounded text-sm font-bold">Save</button>
+                         <button onClick={deleteEdit} className="bg-red-100 text-red-500 px-3 rounded text-sm font-bold border border-red-200">Delete</button>
+                         <button onClick={()=>{setEditingItem(null); setNewItemName("");}} className="text-gray-400 px-2">Cancel</button>
+                       </div>
+                     </div>
+                   ) : (
+                     <div>
+                       <h4 className="text-xs font-bold text-gray-400 uppercase mb-2">➕ Add New Item</h4>
+                       <div className="flex flex-col gap-2">
+                         <div className="flex gap-2"><select value={newCat} onChange={e=>setNewCat(e.target.value)} className="bg-white border rounded text-sm p-2 flex-1"><option value="carbs">🟡 Carbs</option><option value="protein">🔴 Protein</option><option value="veggie">🟢 Veggie</option><option value="fruit">🍎 Fruit</option><option value="workout">🔵 Workout</option></select><input value={newItemCal} type="number" onChange={e=>setNewItemCal(e.target.value)} placeholder="Kcal" className="w-20 bg-white border rounded p-2 text-sm"/></div>
+                         <div className="flex gap-2"><input value={newItemName} onChange={e=>setNewItemName(e.target.value)} placeholder="Name" className="flex-1 bg-white border rounded p-2 text-sm"/><button onClick={addItem} className="bg-emerald-600 text-white px-4 rounded text-sm font-bold">Add</button></div>
+                       </div>
+                     </div>
+                   )}
+                </div>
+              )}
+
+              <div className="glass-card p-6 lg:p-8 relative">
+                {renderSelector('Breakfast', ['carbs','protein','fruit'])}
+                <hr className="border-gray-200/50 my-4"/>
+                {renderSelector('Lunch', ['carbs','protein','veggie','fruit'])}
+                <hr className="border-gray-200/50 my-4"/>
+                {renderSelector('Dinner', ['protein','veggie','fruit'])}
+                <hr className="border-gray-200/50 my-4"/>
+                {renderSelector('Workout', ['workout'])}
+
+                {(showPilates || showMachine) && (
+                  <div className="mt-6 bg-emerald-50/50 p-4 lg:p-6 rounded-2xl border border-emerald-100/50 animate-fade-in">
+                     <div className="flex items-center gap-2 mb-4"><span className="p-1 bg-emerald-500 text-white rounded-full"><CheckCircle size={14}/></span><h4 className="font-bold text-emerald-800 text-sm tracking-wide uppercase">Routine Refinement</h4></div>
+                     {showPilates && <div className="mb-4"><p className="text-[10px] font-bold text-emerald-600 mb-2 uppercase opacity-70">Pilates Flow</p><div className="flex flex-wrap gap-2">{moveLibrary.pilates.map(m => (<button key={m} onClick={()=>toggleMove(m)} className={`px-3 py-1 rounded-full text-xs border ${selectedMoves.includes(m)?'bg-emerald-600 text-white':'bg-white text-emerald-700'}`}>{m}</button>))}</div></div>}
+                     {showMachine && <div><p className="text-[10px] font-bold text-emerald-600 mb-2 uppercase opacity-70">Machine</p><div className="flex flex-wrap gap-2">{moveLibrary.machine.map(m => (<button key={m} onClick={()=>toggleMove(m)} className={`px-3 py-1 rounded-full text-xs border ${selectedMoves.includes(m)?'bg-emerald-600 text-white':'bg-white text-emerald-700'}`}>{m}</button>))}</div></div>}
+                  </div>
+                )}
+                <button onClick={handleSave} className={`w-full mt-6 ${theme.btn} text-white py-4 rounded-2xl font-bold shadow-xl shadow-emerald-200 hover:shadow-2xl hover:-translate-y-1 transition-all flex justify-center items-center gap-2 tracking-wide`}>
+                  <Sparkles size={18}/> Confirm & Log Day
+                </button>
+              </div>
+            </div>
+            
+            {/* Right: Summary */}
+            <div className="space-y-6">
+               <div className="glass-card p-6 bg-gradient-to-br from-gray-900 to-gray-800 text-white border-none shadow-2xl">
+                  <h3 className="font-bold text-emerald-400 mb-6 text-sm tracking-widest flex items-center gap-2"><Flame size={14}/> TODAY'S BALANCE</h3>
+                  <div className="flex justify-between items-end mb-4"><div><div className="text-xs text-gray-400 mb-1">INTAKE</div><div className="text-xl font-bold">{totalIntake} <span className="text-xs font-normal text-gray-500">kcal</span></div></div><div className="text-right"><div className="text-xs text-gray-400 mb-1">BURN</div><div className="text-xl font-bold">{totalBurn} <span className="text-xs font-normal text-gray-500">kcal</span></div></div></div>
+                  <div className="h-3 bg-gray-700 rounded-full overflow-hidden mb-2 relative"><div className="absolute top-0 left-0 h-full bg-red-500 transition-all" style={{width: `${Math.min(100, (totalIntake/totalBurn)*100)}%`}}></div></div>
+                  <div className="flex justify-between text-xs font-mono"><span className="text-gray-400">DEFICIT</span><span className={deficit > 0 ? "text-emerald-400 font-bold" : "text-red-400 font-bold"}>{deficit > 0 ? `-${deficit} kcal 🔥` : `+${Math.abs(deficit)} kcal ⚠️`}</span></div>
+               </div>
+               <div className="glass-card p-6 bg-white/40 backdrop-blur-md">
+                  <h3 className="font-bold text-gray-600 mb-4 text-xs tracking-widest uppercase flex items-center gap-2"><Utensils size={12}/> Breakdown</h3>
+                  <div className="space-y-3 text-sm">
+                    <div className="flex justify-between"><span className="text-yellow-600 font-bold text-xs uppercase">Carbs</span> <span className="font-mono text-gray-700">{intakeStats.carbs} kcal</span></div>
+                    <div className="flex justify-between"><span className="text-red-600 font-bold text-xs uppercase">Protein</span> <span className="font-mono text-gray-700">{intakeStats.protein} kcal</span></div>
+                    <div className="flex justify-between"><span className="text-pink-600 font-bold text-xs uppercase">Fruit</span> <span className="font-mono text-gray-700">{intakeStats.fruit} kcal</span></div>
+                    <div className="flex justify-between"><span className="text-emerald-600 font-bold text-xs uppercase">Veggie</span> <span className="font-mono text-gray-700">{intakeStats.veggie} kcal</span></div>
+                  </div>
                </div>
             </div>
-          )}
+          </>
+        )}
 
-          <div className="glass-card p-6 lg:p-8 relative">
-            {renderSelector('Breakfast', ['carbs','protein','fruit'])}
-            <hr className="border-gray-200/50 my-4"/>
-            {renderSelector('Lunch', ['carbs','protein','veggie','fruit'])}
-            <hr className="border-gray-200/50 my-4"/>
-            {renderSelector('Dinner', ['protein','veggie','fruit'])}
-            <hr className="border-gray-200/50 my-4"/>
-            {renderSelector('Workout', ['workout'])}
-
-            {(showPilates || showMachine) && (
-              <div className="mt-6 bg-emerald-50/50 p-4 lg:p-6 rounded-2xl border border-emerald-100/50 animate-fade-in">
-                 <div className="flex items-center gap-2 mb-4"><span className="p-1 bg-emerald-500 text-white rounded-full"><CheckCircle size={14}/></span><h4 className="font-bold text-emerald-800 text-sm tracking-wide uppercase">Routine Refinement</h4></div>
-                 {showPilates && <div className="mb-4"><p className="text-[10px] font-bold text-emerald-600 mb-2 uppercase opacity-70">Pilates Flow</p><div className="flex flex-wrap gap-2">{moveLibrary.pilates.map(m => (<button key={m} onClick={()=>toggleMove(m)} className={`relative px-3 py-1 rounded-full text-xs border transition-all ${isEditing?'bg-red-50 border-red-200 text-red-500':''} ${!isEditing && selectedMoves.includes(m)?'bg-emerald-600 text-white border-emerald-600':'bg-white text-emerald-700 border-emerald-200'}`}>{m}{isEditing && <X size={8} className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full"/>}</button>))}</div></div>}
-                 {showMachine && <div><p className="text-[10px] font-bold text-emerald-600 mb-2 uppercase opacity-70">Machine</p><div className="flex flex-wrap gap-2">{moveLibrary.machine.map(m => (<button key={m} onClick={()=>toggleMove(m)} className={`relative px-3 py-1 rounded-full text-xs border transition-all ${isEditing?'bg-red-50 border-red-200 text-red-500':''} ${!isEditing && selectedMoves.includes(m)?'bg-emerald-600 text-white border-emerald-600':'bg-white text-emerald-700 border-emerald-200'}`}>{m}{isEditing && <X size={8} className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full"/>}</button>))}</div></div>}
-              </div>
-            )}
-            <button onClick={handleSave} className={`w-full mt-6 ${theme.btn} text-white py-4 rounded-2xl font-bold shadow-xl shadow-emerald-200 hover:shadow-2xl hover:-translate-y-1 transition-all flex justify-center items-center gap-2 tracking-wide`}>
-              <Sparkles size={18}/> Confirm & Log Day
-            </button>
+        {/* === HISTORY TAB === */}
+        {activeTab === 'history' && (
+          <div className="lg:col-span-3 space-y-6 animate-fade-in">
+             <div className="glass-card p-6 h-64 flex flex-col">
+                <h4 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4">Weight Trend</h4>
+                <div className="flex-1"><ResponsiveContainer width="100%" height="100%"><LineChart data={history}><YAxis hide domain={['dataMin-1','dataMax+1']}/><Tooltip contentStyle={{borderRadius:'12px', border:'none', boxShadow:'0 10px 30px -10px rgba(0,0,0,0.1)'}}/><Line type="monotone" dataKey="weight" stroke="#10b981" strokeWidth={3} dot={false}/></LineChart></ResponsiveContainer></div>
+             </div>
+             
+             <div className="space-y-4">
+               {history.slice().reverse().map((entry) => (
+                 <div key={entry.id} className="glass-card p-6 flex flex-col md:flex-row gap-6 items-start md:items-center justify-between">
+                    <div>
+                      <div className="flex items-center gap-3 mb-2">
+                        <span className="text-lg font-bold text-gray-800">{entry.date}</span>
+                        <span className="bg-gray-100 text-gray-600 text-xs px-2 py-1 rounded font-bold">{entry.weight} kg</span>
+                      </div>
+                      <div className="text-sm text-gray-500 space-x-3">
+                        <span className="text-red-500 font-medium">In: {entry.stats?.totalIntake || 0}</span>
+                        <span className="text-green-500 font-medium">Out: {entry.stats?.activeBurn || 0} (Act)</span>
+                        <span className={(entry.stats?.deficit||0) > 0 ? "text-emerald-600 font-bold" : "text-red-400"}>
+                          Deficit: {entry.stats?.deficit || 0}
+                        </span>
+                      </div>
+                    </div>
+                    
+                    {/* Detail Chips */}
+                    <div className="flex flex-wrap gap-2 max-w-xl justify-start md:justify-end">
+                      {[...entry.build.breakfast, ...entry.build.lunch, ...entry.build.dinner].map((f, i) => (
+                        <span key={i} className="text-xs bg-white/50 border border-gray-200 px-2 py-1 rounded text-gray-600">
+                          {f.name} {f.count > 1 && `x${f.count}`}
+                        </span>
+                      ))}
+                      {entry.build.workout.map((w, i) => (
+                        <span key={i} className="text-xs bg-blue-50 border border-blue-100 px-2 py-1 rounded text-blue-600 font-bold">
+                          {w.name} {w.count > 1 && `x${w.count}`}
+                        </span>
+                      ))}
+                    </div>
+                 </div>
+               ))}
+               {history.length === 0 && <div className="text-center text-gray-400 py-10">No history yet. Start building!</div>}
+             </div>
           </div>
-        </div>
-        
-        {/* Right: Energy Dashboard & Summary */}
-        <div className="space-y-6">
-           {/* 🔥 ENERGY CARD */}
-           <div className="glass-card p-6 bg-gradient-to-br from-gray-900 to-gray-800 text-white border-none shadow-2xl">
-              <h3 className="font-bold text-emerald-400 mb-6 text-sm tracking-widest flex items-center gap-2"><Flame size={14}/> ENERGY BALANCE</h3>
-              <div className="flex justify-between items-end mb-4">
-                <div><div className="text-xs text-gray-400 mb-1">INTAKE</div><div className="text-xl font-bold">{totalIntake} <span className="text-xs font-normal text-gray-500">kcal</span></div></div>
-                <div className="text-right"><div className="text-xs text-gray-400 mb-1">BURN (BMR+Ex)</div><div className="text-xl font-bold">{totalBurn} <span className="text-xs font-normal text-gray-500">kcal</span></div></div>
-              </div>
-              <div className="h-3 bg-gray-700 rounded-full overflow-hidden mb-2 relative"><div className="absolute top-0 left-0 h-full bg-red-500 transition-all" style={{width: `${Math.min(100, (totalIntake/totalBurn)*100)}%`}}></div></div>
-              <div className="flex justify-between text-xs font-mono"><span className="text-gray-400">DEFICIT</span><span className={deficit > 0 ? "text-emerald-400 font-bold" : "text-red-400 font-bold"}>{deficit > 0 ? `-${deficit} kcal 🔥` : `+${Math.abs(deficit)} kcal ⚠️`}</span></div>
-           </div>
+        )}
 
-           {/* Detail Summary */}
-           <div className="glass-card p-6 bg-white/40 backdrop-blur-md">
-              <h3 className="font-bold text-gray-600 mb-4 text-xs tracking-widest uppercase flex items-center gap-2"><Utensils size={12}/> Breakdown</h3>
-              <div className="space-y-3 text-sm">
-                <div className="flex justify-between"><span className="text-yellow-600 font-bold text-xs uppercase">Carbs</span> <span className="font-mono text-gray-700">{intakeStats.carbs} kcal</span></div>
-                <div className="flex justify-between"><span className="text-red-600 font-bold text-xs uppercase">Protein</span> <span className="font-mono text-gray-700">{intakeStats.protein} kcal</span></div>
-                <div className="flex justify-between"><span className="text-emerald-600 font-bold text-xs uppercase">Veggie</span> <span className="font-mono text-gray-700">{intakeStats.veggie} kcal</span></div>
-                <div className="flex justify-between"><span className="text-pink-600 font-bold text-xs uppercase">Fruit</span> <span className="font-mono text-gray-700">{intakeStats.fruit} kcal</span></div>
-                <div className="pt-2 border-t border-gray-200 mt-2"><span className="text-blue-600 font-bold text-xs uppercase">Active Burn</span> <div className="text-gray-800 font-bold">{activeBurn} kcal</div></div>
-              </div>
-           </div>
-
-           <div className="glass-card p-6 h-48 flex flex-col">
-              <h4 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4">Trend</h4>
-              <div className="flex-1"><ResponsiveContainer width="100%" height="100%"><LineChart data={history}><YAxis hide domain={['dataMin-1','dataMax+1']}/><Tooltip contentStyle={{borderRadius:'12px', border:'none', boxShadow:'0 10px 30px -10px rgba(0,0,0,0.1)'}}/><Line type="monotone" dataKey="weight" stroke="#10b981" strokeWidth={3} dot={false}/></LineChart></ResponsiveContainer></div>
-           </div>
-        </div>
       </div>
     </div>
   );
 };
 
 // ==========================================
-// 🧠 模块 2: Mind Protocol
+// 🧠 模块 2: Mind Protocol (Kept Same)
 // ==========================================
 const MindModule = ({ goBack, addXP }) => {
   const theme = THEMES.mind;
@@ -373,7 +426,7 @@ const MindModule = ({ goBack, addXP }) => {
 };
 
 // ==========================================
-// 🎹 模块 3: Music Band
+// 🎹 模块 3: Music Band (Kept Same)
 // ==========================================
 const MusicModule = ({ goBack, addXP }) => {
   const theme = THEMES.music;
@@ -418,7 +471,7 @@ const MusicModule = ({ goBack, addXP }) => {
 };
 
 // ==========================================
-// 🤖 模块 4: AI Lab
+// 🤖 模块 4: AI Lab (Kept Same)
 // ==========================================
 const AILabModule = ({ goBack }) => {
   const theme = THEMES.ai;
