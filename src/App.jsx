@@ -3,12 +3,12 @@ import {
   Dumbbell, Brain, Music, Bot, 
   BookOpen, AlertTriangle, Lightbulb, Mic, 
   ChevronRight, ArrowLeft, Save, Plus, Settings,
-  Search, Trash2, X, Play, Square, Activity, Trophy, Sparkles, Zap, Download, Upload, CheckCircle, Flame, Utensils
+  Search, Trash2, X, Play, Square, Activity, Trophy, Sparkles, Zap, Download, Upload, CheckCircle, Flame, Utensils, Minus
 } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 
 // ==========================================
-// 🎨 美学配置 (Aesthetic System)
+// 🎨 美学配置
 // ==========================================
 const THEMES = {
   body: { bg: "from-emerald-100/80 via-teal-50/50 to-cyan-100/80", card: "bg-white/60", accent: "text-emerald-700", btn: "bg-emerald-600 hover:bg-emerald-700", slogan: "Sculpt the vessel." },
@@ -45,7 +45,7 @@ const calculateHeatmap = (logs) => {
 };
 
 // ==========================================
-// 💾 数据管理系统
+// 💾 数据管理
 // ==========================================
 const DataManager = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -89,14 +89,13 @@ const DataManager = () => {
 };
 
 // ==========================================
-// 🧩 模块 1: Body OS (Mobile Optimized + Calories)
+// 🧩 模块 1: Body OS (Quantity Logic Added)
 // ==========================================
 const BodyModule = ({ goBack, addXP }) => {
   const theme = THEMES.body;
   const [history, setHistory] = useStorage('lifeos_body_history', []);
   const [weight, setWeight] = useState(60.0);
   
-  // 🔥 新增：带热量的积木库 (Cal = Kcal)
   const [baseLibrary, setBaseLibrary] = useStorage('lifeos_body_lib_v4', {
     carbs: [
       { name: '🌽 玉米', cal: 150 }, { name: '🍠 紫薯', cal: 130 }, 
@@ -124,35 +123,48 @@ const BodyModule = ({ goBack, addXP }) => {
     machine: ['后抬腿', '蚌式开合', '侧向行走', '深蹲行走', '驴踢']
   });
 
+  // State now supports counts: [{ name: 'Corn', cal: 150, count: 2 }]
   const [build, setBuild] = useState({ breakfast: [], lunch: [], dinner: [], workout: [] });
   const [selectedMoves, setSelectedMoves] = useState([]);
   const [isEditing, setIsEditing] = useState(false);
-  
-  // 自定义状态
   const [newItemName, setNewItemName] = useState("");
   const [newItemCal, setNewItemCal] = useState(100);
   const [newCat, setNewCat] = useState("carbs");
 
-  // Logic
-  const toggleItem = (slot, item) => {
+  // --- Quantity Logic ---
+  const updateCount = (slot, item, delta) => {
+    // Editing mode: Delete logic
     if (isEditing) {
       if (window.confirm(`永久删除 "${item.name}"?`)) {
-        for (const k in baseLibrary) {
-           // 比较 name 属性
-           if (baseLibrary[k].some(i => i.name === item.name)) {
-             setBaseLibrary({...baseLibrary, [k]: baseLibrary[k].filter(i=>i.name!==item.name)});
-           }
-        }
+        for (const k in baseLibrary) if (baseLibrary[k].some(i => i.name === item.name)) setBaseLibrary({...baseLibrary, [k]: baseLibrary[k].filter(i=>i.name!==item.name)});
       }
       return;
     }
-    // 检查是否已选 (通过 name 匹配)
-    const exists = build[slot].some(i => i.name === item.name);
-    if (exists) {
-      setBuild(prev => ({ ...prev, [slot]: prev[slot].filter(i => i.name !== item.name) }));
-    } else {
-      setBuild(prev => ({ ...prev, [slot]: [...prev[slot], item] }));
-    }
+
+    // Normal mode: Increment/Decrement
+    setBuild(prev => {
+      const list = [...prev[slot]];
+      const index = list.findIndex(i => i.name === item.name);
+      
+      if (index > -1) {
+        // Exists, update count
+        const newCount = list[index].count + delta;
+        if (newCount <= 0) {
+          list.splice(index, 1); // Remove if 0
+        } else {
+          list[index] = { ...list[index], count: newCount };
+        }
+      } else if (delta > 0) {
+        // New item
+        list.push({ ...item, count: 1 });
+      }
+      return { ...prev, [slot]: list };
+    });
+  };
+
+  const getCount = (slot, itemName) => {
+    const item = build[slot].find(i => i.name === itemName);
+    return item ? item.count : 0;
   };
 
   const toggleMove = (move) => { if (isEditing) return; setSelectedMoves(prev => prev.includes(move) ? prev.filter(i => i !== move) : [...prev, move]); };
@@ -160,9 +172,8 @@ const BodyModule = ({ goBack, addXP }) => {
   const addItem = () => {
     if(!newItemName) return;
     if(['pilates','machine'].includes(newCat)) {
-       setMoveLibrary({...moveLibrary, [newCat]: [...moveLibrary[newCat], newItemName]}); // Moves are just strings
+       setMoveLibrary({...moveLibrary, [newCat]: [...moveLibrary[newCat], newItemName]});
     } else {
-       // Foods are objects
        const newObj = { name: newItemName, cal: parseInt(newItemCal) || 0 };
        setBaseLibrary({...baseLibrary, [newCat]: [...baseLibrary[newCat], newObj]});
     }
@@ -175,9 +186,9 @@ const BodyModule = ({ goBack, addXP }) => {
     addXP(20); alert("Body Logged! (+20 XP)");
   };
 
-  // 🔥 计算热量核心逻辑
-  const bmr = weight * 22 * 1.2; // 粗略基础代谢公式 (体重kg * 22 * 1.2活动系数)
-  const calculateTotal = (arr) => arr.reduce((acc, item) => acc + item.cal, 0);
+  // 🔥 Calorie Calculation with Counts
+  const bmr = weight * 22 * 1.2;
+  const calculateTotal = (arr) => arr.reduce((acc, item) => acc + (item.cal * (item.count || 1)), 0);
   
   const intakeStats = {
     carbs: calculateTotal([...build.breakfast, ...build.lunch, ...build.dinner].filter(i => baseLibrary.carbs.some(lib => lib.name === i.name))),
@@ -198,15 +209,32 @@ const BodyModule = ({ goBack, addXP }) => {
       <h4 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3 flex items-center gap-2"><span className="w-1 h-4 bg-emerald-400 rounded-full"></span> {slot}</h4>
       <div className="flex flex-wrap gap-2">
         {types.map(t => baseLibrary[t]?.map(item => {
-          const isSelected = build[slot.toLowerCase()].some(i => i.name === item.name);
+          const count = getCount(slot.toLowerCase(), item.name);
           return (
-            <button key={item.name} onClick={()=>toggleItem(slot.toLowerCase(), item)} 
+            <button key={item.name} 
+              onClick={()=>updateCount(slot.toLowerCase(), item, 1)} 
               className={`relative px-3 py-2 rounded-xl text-sm transition-all duration-300 shadow-sm border flex flex-col items-center min-w-[80px]
                 ${isEditing ? 'bg-red-50 border-red-200 text-red-500 hover:bg-red-100' : ''}
-                ${!isEditing && isSelected ? 'bg-emerald-600 text-white border-emerald-500 shadow-emerald-200 shadow-lg transform -translate-y-1' : !isEditing && 'bg-white/80 hover:bg-white text-gray-600 border-white/50 hover:border-emerald-200'}`}>
+                ${!isEditing && count > 0 ? 'bg-emerald-600 text-white border-emerald-500 shadow-emerald-200 shadow-lg transform -translate-y-1' : !isEditing && 'bg-white/80 hover:bg-white text-gray-600 border-white/50 hover:border-emerald-200'}`}>
+              
+              {/* Name & Kcal */}
               <span className="font-medium">{item.name}</span>
-              <span className={`text-[10px] ${isSelected ? 'text-emerald-100' : 'text-gray-400'}`}>{item.cal}k</span>
+              <span className={`text-[10px] ${count > 0 ? 'text-emerald-100' : 'text-gray-400'}`}>{item.cal}k</span>
+              
+              {/* Badges */}
               {isEditing && <X size={10} className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full"/>}
+              {!isEditing && count > 0 && (
+                <>
+                  <div className="absolute -top-2 -right-2 bg-yellow-400 text-black text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center shadow-sm">x{count}</div>
+                  {/* Minus Button Overlay (Click area prevention needs care, using absolute positioning) */}
+                  <div 
+                    onClick={(e) => { e.stopPropagation(); updateCount(slot.toLowerCase(), item, -1); }}
+                    className="absolute -top-2 -left-2 bg-red-500 text-white w-5 h-5 rounded-full flex items-center justify-center shadow-sm hover:bg-red-600 cursor-pointer"
+                  >
+                    <Minus size={10}/>
+                  </div>
+                </>
+              )}
             </button>
           )
         }))}
@@ -219,7 +247,6 @@ const BodyModule = ({ goBack, addXP }) => {
       <BackgroundBlobs color="bg-emerald-300" />
       <Header title="Body OS" icon={Dumbbell} theme={theme} goBack={goBack} />
       
-      {/* 📱 Mobile: grid-cols-1, Desktop: grid-cols-3 */}
       <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-6 relative z-10 pb-20">
         
         {/* Left: Builder */}
@@ -280,22 +307,12 @@ const BodyModule = ({ goBack, addXP }) => {
            {/* 🔥 ENERGY CARD */}
            <div className="glass-card p-6 bg-gradient-to-br from-gray-900 to-gray-800 text-white border-none shadow-2xl">
               <h3 className="font-bold text-emerald-400 mb-6 text-sm tracking-widest flex items-center gap-2"><Flame size={14}/> ENERGY BALANCE</h3>
-              
               <div className="flex justify-between items-end mb-4">
                 <div><div className="text-xs text-gray-400 mb-1">INTAKE</div><div className="text-xl font-bold">{totalIntake} <span className="text-xs font-normal text-gray-500">kcal</span></div></div>
                 <div className="text-right"><div className="text-xs text-gray-400 mb-1">BURN (BMR+Ex)</div><div className="text-xl font-bold">{totalBurn} <span className="text-xs font-normal text-gray-500">kcal</span></div></div>
               </div>
-              
-              {/* Deficit Bar */}
-              <div className="h-3 bg-gray-700 rounded-full overflow-hidden mb-2 relative">
-                 <div className="absolute top-0 left-0 h-full bg-red-500 transition-all" style={{width: `${Math.min(100, (totalIntake/totalBurn)*100)}%`}}></div>
-              </div>
-              <div className="flex justify-between text-xs font-mono">
-                 <span className="text-gray-400">DEFICIT TARGET</span>
-                 <span className={deficit > 0 ? "text-emerald-400 font-bold" : "text-red-400 font-bold"}>
-                   {deficit > 0 ? `-${deficit} kcal 🔥` : `+${Math.abs(deficit)} kcal ⚠️`}
-                 </span>
-              </div>
+              <div className="h-3 bg-gray-700 rounded-full overflow-hidden mb-2 relative"><div className="absolute top-0 left-0 h-full bg-red-500 transition-all" style={{width: `${Math.min(100, (totalIntake/totalBurn)*100)}%`}}></div></div>
+              <div className="flex justify-between text-xs font-mono"><span className="text-gray-400">DEFICIT</span><span className={deficit > 0 ? "text-emerald-400 font-bold" : "text-red-400 font-bold"}>{deficit > 0 ? `-${deficit} kcal 🔥` : `+${Math.abs(deficit)} kcal ⚠️`}</span></div>
            </div>
 
            {/* Detail Summary */}
@@ -321,7 +338,7 @@ const BodyModule = ({ goBack, addXP }) => {
 };
 
 // ==========================================
-// 🧠 模块 2: Mind Protocol (Mobile Fixes)
+// 🧠 模块 2: Mind Protocol
 // ==========================================
 const MindModule = ({ goBack, addXP }) => {
   const theme = THEMES.mind;
