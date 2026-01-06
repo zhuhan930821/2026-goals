@@ -3,12 +3,12 @@ import {
   Dumbbell, Brain, Music, Bot, 
   BookOpen, AlertTriangle, Lightbulb, Mic, 
   ChevronRight, ArrowLeft, Save, Plus, Settings,
-  Search, Trash2, X, Play, Square, Activity, Trophy, Sparkles, Zap, Download, Upload, CheckCircle
+  Search, Trash2, X, Play, Square, Activity, Trophy, Sparkles, Zap, Download, Upload, CheckCircle, Flame, Utensils
 } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 
 // ==========================================
-// 🎨 美学配置
+// 🎨 美学配置 (Aesthetic System)
 // ==========================================
 const THEMES = {
   body: { bg: "from-emerald-100/80 via-teal-50/50 to-cyan-100/80", card: "bg-white/60", accent: "text-emerald-700", btn: "bg-emerald-600 hover:bg-emerald-700", slogan: "Sculpt the vessel." },
@@ -45,7 +45,7 @@ const calculateHeatmap = (logs) => {
 };
 
 // ==========================================
-// 💾 数据管理
+// 💾 数据管理系统
 // ==========================================
 const DataManager = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -89,20 +89,36 @@ const DataManager = () => {
 };
 
 // ==========================================
-// 🧩 模块 1: Body OS
+// 🧩 模块 1: Body OS (Mobile Optimized + Calories)
 // ==========================================
 const BodyModule = ({ goBack, addXP }) => {
   const theme = THEMES.body;
   const [history, setHistory] = useStorage('lifeos_body_history', []);
   const [weight, setWeight] = useState(60.0);
   
-  const [baseLibrary, setBaseLibrary] = useStorage('lifeos_body_lib_v3', {
-    carbs: ['🌽 玉米', '🍠 紫薯', '🍞 全麦', '🥣 燕麦', '🍌 香蕉'],
-    protein: ['🥚 鸡蛋', '🥛 豆浆', '🍗 鸡胸', '🥩 牛肉', '🦐 虾仁'],
-    veggie: ['🥗 绿叶菜', '🥦 西兰花', '🥒 黄瓜', '🍅 番茄'],
-    fruit: ['🍎 苹果', '🫐 蓝莓', '🥝 猕猴桃'],
-    workout: ['🏃 慢跑', '🧘 普拉提', '🍑 超模机', '🏋️ 举铁']
+  // 🔥 新增：带热量的积木库 (Cal = Kcal)
+  const [baseLibrary, setBaseLibrary] = useStorage('lifeos_body_lib_v4', {
+    carbs: [
+      { name: '🌽 玉米', cal: 150 }, { name: '🍠 紫薯', cal: 130 }, 
+      { name: '🍞 全麦面包', cal: 180 }, { name: '🥣 燕麦', cal: 140 }, { name: '🍌 香蕉', cal: 90 }
+    ],
+    protein: [
+      { name: '🥚 鸡蛋', cal: 70 }, { name: '🥛 豆浆', cal: 50 }, 
+      { name: '🍗 鸡胸', cal: 120 }, { name: '🥩 牛肉', cal: 150 }, { name: '🦐 虾仁', cal: 80 }
+    ],
+    veggie: [
+      { name: '🥗 绿叶菜', cal: 20 }, { name: '🥦 西兰花', cal: 30 }, 
+      { name: '🥒 黄瓜', cal: 15 }, { name: '🍅 番茄', cal: 20 }
+    ],
+    fruit: [
+      { name: '🍎 苹果', cal: 60 }, { name: '🫐 蓝莓', cal: 40 }, { name: '🥝 猕猴桃', cal: 50 }
+    ],
+    workout: [
+      { name: '🏃 慢跑(30m)', cal: 300 }, { name: '🧘 普拉提(1h)', cal: 200 }, 
+      { name: '🍑 超模机(20m)', cal: 150 }, { name: '🏋️ 举铁(40m)', cal: 250 }
+    ]
   });
+
   const [moveLibrary, setMoveLibrary] = useStorage('lifeos_move_lib_v3', {
     pilates: ['百次拍击', '卷腹', '单腿画圈', '十字交叉', '天鹅式'],
     machine: ['后抬腿', '蚌式开合', '侧向行走', '深蹲行走', '驴踢']
@@ -111,49 +127,133 @@ const BodyModule = ({ goBack, addXP }) => {
   const [build, setBuild] = useState({ breakfast: [], lunch: [], dinner: [], workout: [] });
   const [selectedMoves, setSelectedMoves] = useState([]);
   const [isEditing, setIsEditing] = useState(false);
-  const [newItem, setNewItem] = useState("");
+  
+  // 自定义状态
+  const [newItemName, setNewItemName] = useState("");
+  const [newItemCal, setNewItemCal] = useState(100);
   const [newCat, setNewCat] = useState("carbs");
 
+  // Logic
   const toggleItem = (slot, item) => {
     if (isEditing) {
-      if (window.confirm(`Delete "${item}"?`)) {
-        for (const k in baseLibrary) if (baseLibrary[k].includes(item)) setBaseLibrary({...baseLibrary, [k]: baseLibrary[k].filter(i=>i!==item)});
-        for (const k in moveLibrary) if (moveLibrary[k].includes(item)) setMoveLibrary({...moveLibrary, [k]: moveLibrary[k].filter(i=>i!==item)});
+      if (window.confirm(`永久删除 "${item.name}"?`)) {
+        for (const k in baseLibrary) {
+           // 比较 name 属性
+           if (baseLibrary[k].some(i => i.name === item.name)) {
+             setBaseLibrary({...baseLibrary, [k]: baseLibrary[k].filter(i=>i.name!==item.name)});
+           }
+        }
       }
       return;
     }
-    setBuild(prev => ({ ...prev, [slot]: prev[slot].includes(item) ? prev[slot].filter(i=>i!==item) : [...prev[slot], item] }));
+    // 检查是否已选 (通过 name 匹配)
+    const exists = build[slot].some(i => i.name === item.name);
+    if (exists) {
+      setBuild(prev => ({ ...prev, [slot]: prev[slot].filter(i => i.name !== item.name) }));
+    } else {
+      setBuild(prev => ({ ...prev, [slot]: [...prev[slot], item] }));
+    }
   };
+
   const toggleMove = (move) => { if (isEditing) return; setSelectedMoves(prev => prev.includes(move) ? prev.filter(i => i !== move) : [...prev, move]); };
-  const addItem = () => { if(!newItem) return; if(['pilates','machine'].includes(newCat)) setMoveLibrary({...moveLibrary, [newCat]: [...moveLibrary[newCat], newItem]}); else setBaseLibrary({...baseLibrary, [newCat]: [...baseLibrary[newCat], newItem]}); setNewItem(""); };
-  const handleSave = () => { setHistory([...history, { id: Date.now(), date: new Date().toLocaleDateString(), weight, build, detailedMoves: selectedMoves, type: 'body' }]); addXP(20); alert("Body Logged! (+20 XP)"); };
   
-  const getSummary = () => { 
-    const all = [...build.breakfast, ...build.lunch, ...build.dinner]; 
-    return { 
-      carbs: all.filter(i => baseLibrary.carbs?.includes(i)), 
-      protein: all.filter(i => baseLibrary.protein?.includes(i)), 
-      veggie: all.filter(i => baseLibrary.veggie?.includes(i)), 
-      fruit: all.filter(i => baseLibrary.fruit?.includes(i)) 
-    }; 
+  const addItem = () => {
+    if(!newItemName) return;
+    if(['pilates','machine'].includes(newCat)) {
+       setMoveLibrary({...moveLibrary, [newCat]: [...moveLibrary[newCat], newItemName]}); // Moves are just strings
+    } else {
+       // Foods are objects
+       const newObj = { name: newItemName, cal: parseInt(newItemCal) || 0 };
+       setBaseLibrary({...baseLibrary, [newCat]: [...baseLibrary[newCat], newObj]});
+    }
+    setNewItemName("");
   };
-  const summary = getSummary();
-  const showPilates = build.workout.includes('🧘 普拉提');
-  const showMachine = build.workout.includes('🍑 超模机');
+
+  const handleSave = () => {
+    const record = { id: Date.now(), date: new Date().toLocaleDateString(), weight, build, detailedMoves: selectedMoves, type: 'body' };
+    setHistory([...history, record]);
+    addXP(20); alert("Body Logged! (+20 XP)");
+  };
+
+  // 🔥 计算热量核心逻辑
+  const bmr = weight * 22 * 1.2; // 粗略基础代谢公式 (体重kg * 22 * 1.2活动系数)
+  const calculateTotal = (arr) => arr.reduce((acc, item) => acc + item.cal, 0);
+  
+  const intakeStats = {
+    carbs: calculateTotal([...build.breakfast, ...build.lunch, ...build.dinner].filter(i => baseLibrary.carbs.some(lib => lib.name === i.name))),
+    protein: calculateTotal([...build.breakfast, ...build.lunch, ...build.dinner].filter(i => baseLibrary.protein.some(lib => lib.name === i.name))),
+    veggie: calculateTotal([...build.breakfast, ...build.lunch, ...build.dinner].filter(i => baseLibrary.veggie.some(lib => lib.name === i.name))),
+    fruit: calculateTotal([...build.breakfast, ...build.lunch, ...build.dinner].filter(i => baseLibrary.fruit.some(lib => lib.name === i.name))),
+  };
+  const totalIntake = calculateTotal([...build.breakfast, ...build.lunch, ...build.dinner]);
+  const activeBurn = calculateTotal(build.workout);
+  const totalBurn = Math.round(bmr + activeBurn);
+  const deficit = totalBurn - totalIntake;
+
+  const showPilates = build.workout.some(i => i.name.includes('普拉提'));
+  const showMachine = build.workout.some(i => i.name.includes('超模机'));
 
   const renderSelector = (slot, types) => (
-    <div className="mb-6"><h4 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3 flex items-center gap-2"><span className="w-1 h-4 bg-emerald-400 rounded-full"></span> {slot}</h4><div className="flex flex-wrap gap-2">{types.map(t => baseLibrary[t]?.map(item => (<button key={item} onClick={()=>toggleItem(slot.toLowerCase(), item)} className={`relative px-4 py-2 rounded-xl text-sm transition-all duration-300 shadow-sm border ${isEditing ? 'bg-red-50 border-red-200 text-red-500 hover:bg-red-100' : ''} ${!isEditing && build[slot.toLowerCase()].includes(item) ? 'bg-emerald-600 text-white border-emerald-500 shadow-emerald-200 shadow-lg transform -translate-y-1' : !isEditing && 'bg-white/80 hover:bg-white text-gray-600 border-white/50 hover:border-emerald-200'}`}>{item}{isEditing && <X size={10} className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full"/>}</button>)))}</div></div>
+    <div className="mb-6">
+      <h4 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3 flex items-center gap-2"><span className="w-1 h-4 bg-emerald-400 rounded-full"></span> {slot}</h4>
+      <div className="flex flex-wrap gap-2">
+        {types.map(t => baseLibrary[t]?.map(item => {
+          const isSelected = build[slot.toLowerCase()].some(i => i.name === item.name);
+          return (
+            <button key={item.name} onClick={()=>toggleItem(slot.toLowerCase(), item)} 
+              className={`relative px-3 py-2 rounded-xl text-sm transition-all duration-300 shadow-sm border flex flex-col items-center min-w-[80px]
+                ${isEditing ? 'bg-red-50 border-red-200 text-red-500 hover:bg-red-100' : ''}
+                ${!isEditing && isSelected ? 'bg-emerald-600 text-white border-emerald-500 shadow-emerald-200 shadow-lg transform -translate-y-1' : !isEditing && 'bg-white/80 hover:bg-white text-gray-600 border-white/50 hover:border-emerald-200'}`}>
+              <span className="font-medium">{item.name}</span>
+              <span className={`text-[10px] ${isSelected ? 'text-emerald-100' : 'text-gray-400'}`}>{item.cal}k</span>
+              {isEditing && <X size={10} className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full"/>}
+            </button>
+          )
+        }))}
+      </div>
+    </div>
   );
 
   return (
-    <div className={`min-h-screen bg-gradient-to-br ${theme.bg} p-6 relative overflow-hidden font-sans`}>
+    <div className={`min-h-screen bg-gradient-to-br ${theme.bg} p-4 lg:p-6 relative overflow-x-hidden font-sans`}>
       <BackgroundBlobs color="bg-emerald-300" />
       <Header title="Body OS" icon={Dumbbell} theme={theme} goBack={goBack} />
-      <div className="max-w-6xl mx-auto grid lg:grid-cols-3 gap-8 relative z-10">
+      
+      {/* 📱 Mobile: grid-cols-1, Desktop: grid-cols-3 */}
+      <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-6 relative z-10 pb-20">
+        
+        {/* Left: Builder */}
         <div className="lg:col-span-2 space-y-6">
-          <div className="glass-card p-4 flex justify-between items-center"><div className="flex items-center gap-4"><span className="font-medium text-gray-700 flex items-center gap-2"><Activity size={18} className="text-emerald-500"/> Morning Weight</span><div className="flex items-center gap-1"><input type="number" value={weight} onChange={e=>setWeight(e.target.value)} className="text-2xl font-bold w-20 text-right bg-transparent border-b border-gray-300 focus:outline-none focus:border-emerald-500 text-emerald-700"/> <span className="text-sm text-gray-400">kg</span></div></div><button onClick={()=>setIsEditing(!isEditing)} className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all flex items-center gap-1 ${isEditing ? 'bg-red-100 text-red-600 border-red-200' : 'bg-white text-gray-500 border-gray-200'}`}><Settings size={14}/> {isEditing ? 'Done' : 'Edit'}</button></div>
-          {isEditing && (<div className="glass-card p-4 bg-white/80 animate-fade-in border-l-4 border-emerald-400"><div className="flex gap-2"><select value={newCat} onChange={e=>setNewCat(e.target.value)} className="bg-white border-none rounded-lg text-sm p-2 font-bold text-gray-600 focus:ring-2 focus:ring-emerald-200"><option value="carbs">🟡 Carbs</option><option value="protein">🔴 Protein</option><option value="veggie">🟢 Veggie</option><option value="fruit">🍎 Fruit</option><option value="workout">🔵 Workout</option><option disabled>---</option><option value="pilates">🧘 Pilates Move</option><option value="machine">🍑 Machine Move</option></select><input value={newItem} onChange={e=>setNewItem(e.target.value)} placeholder="Name" className="flex-1 bg-white border-none rounded-lg text-sm p-2 focus:ring-2 focus:ring-emerald-200"/><button onClick={addItem} className="bg-emerald-600 text-white px-4 rounded-lg font-bold text-sm">Add</button></div></div>)}
-          <div className="glass-card p-8 relative">
+          <div className="glass-card p-4 flex justify-between items-center">
+             <div className="flex items-center gap-2">
+                <span className="font-medium text-gray-700 flex items-center gap-2 text-sm lg:text-base"><Activity size={18} className="text-emerald-500"/> Weight</span>
+                <div className="flex items-center gap-1"><input type="number" value={weight} onChange={e=>setWeight(e.target.value)} className="text-xl lg:text-2xl font-bold w-16 lg:w-20 text-right bg-transparent border-b border-gray-300 focus:outline-none focus:border-emerald-500 text-emerald-700"/> <span className="text-xs text-gray-400">kg</span></div>
+             </div>
+             <button onClick={()=>setIsEditing(!isEditing)} className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all flex items-center gap-1 ${isEditing ? 'bg-red-100 text-red-600 border-red-200' : 'bg-white text-gray-500 border-gray-200'}`}>
+               <Settings size={14}/> {isEditing ? 'Done' : 'Edit'}
+             </button>
+          </div>
+
+          {isEditing && (
+            <div className="glass-card p-4 bg-white/80 animate-fade-in border-l-4 border-emerald-400">
+               <h4 className="text-xs font-bold text-gray-400 uppercase mb-2">➕ Add Custom Block</h4>
+               <div className="flex flex-col gap-2">
+                 <div className="flex gap-2">
+                    <select value={newCat} onChange={e=>setNewCat(e.target.value)} className="bg-white border-none rounded-lg text-sm p-2 font-bold text-gray-600 focus:ring-2 focus:ring-emerald-200 flex-1">
+                      <option value="carbs">🟡 Carbs</option><option value="protein">🔴 Protein</option><option value="veggie">🟢 Veggie</option><option value="fruit">🍎 Fruit</option><option value="workout">🔵 Workout</option>
+                      <option disabled>---</option><option value="pilates">🧘 Pilates Move</option><option value="machine">🍑 Machine Move</option>
+                    </select>
+                    <input value={newItemCal} type="number" onChange={e=>setNewItemCal(e.target.value)} placeholder="Kcal" className="w-20 bg-white border-none rounded-lg text-sm p-2 focus:ring-2 focus:ring-emerald-200"/>
+                 </div>
+                 <div className="flex gap-2">
+                    <input value={newItemName} onChange={e=>setNewItemName(e.target.value)} placeholder="Name (e.g. Quinoa)" className="flex-1 bg-white border-none rounded-lg text-sm p-2 focus:ring-2 focus:ring-emerald-200"/>
+                    <button onClick={addItem} className="bg-emerald-600 text-white px-4 rounded-lg font-bold text-sm">Add</button>
+                 </div>
+               </div>
+            </div>
+          )}
+
+          <div className="glass-card p-6 lg:p-8 relative">
             {renderSelector('Breakfast', ['carbs','protein','fruit'])}
             <hr className="border-gray-200/50 my-4"/>
             {renderSelector('Lunch', ['carbs','protein','veggie','fruit'])}
@@ -161,20 +261,59 @@ const BodyModule = ({ goBack, addXP }) => {
             {renderSelector('Dinner', ['protein','veggie','fruit'])}
             <hr className="border-gray-200/50 my-4"/>
             {renderSelector('Workout', ['workout'])}
-            {(showPilates || showMachine) && (<div className="mt-6 bg-emerald-50/50 p-6 rounded-2xl border border-emerald-100/50 animate-fade-in"><div className="flex items-center gap-2 mb-4"><span className="p-1 bg-emerald-500 text-white rounded-full"><CheckCircle size={14}/></span><h4 className="font-bold text-emerald-800 text-sm tracking-wide uppercase">Routine Refinement</h4></div><div className="flex flex-wrap gap-2">{[...(showPilates?moveLibrary.pilates:[]), ...(showMachine?moveLibrary.machine:[])].map(m => (<button key={m} onClick={()=>toggleMove(m)} className={`relative px-3 py-1 rounded-full text-xs border transition-all ${isEditing?'bg-red-50 border-red-200 text-red-500':''} ${!isEditing && selectedMoves.includes(m)?'bg-emerald-600 text-white border-emerald-600':'bg-white text-emerald-700 border-emerald-200'}`}>{m}{isEditing && <X size={8} className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full"/>}</button>))}</div></div>)}
-            <button onClick={handleSave} className={`w-full mt-6 ${theme.btn} text-white py-4 rounded-2xl font-bold shadow-xl shadow-emerald-200 hover:shadow-2xl hover:-translate-y-1 transition-all flex justify-center items-center gap-2 tracking-wide`}><Sparkles size={18}/> Confirm & Log Day</button>
+
+            {(showPilates || showMachine) && (
+              <div className="mt-6 bg-emerald-50/50 p-4 lg:p-6 rounded-2xl border border-emerald-100/50 animate-fade-in">
+                 <div className="flex items-center gap-2 mb-4"><span className="p-1 bg-emerald-500 text-white rounded-full"><CheckCircle size={14}/></span><h4 className="font-bold text-emerald-800 text-sm tracking-wide uppercase">Routine Refinement</h4></div>
+                 {showPilates && <div className="mb-4"><p className="text-[10px] font-bold text-emerald-600 mb-2 uppercase opacity-70">Pilates Flow</p><div className="flex flex-wrap gap-2">{moveLibrary.pilates.map(m => (<button key={m} onClick={()=>toggleMove(m)} className={`relative px-3 py-1 rounded-full text-xs border transition-all ${isEditing?'bg-red-50 border-red-200 text-red-500':''} ${!isEditing && selectedMoves.includes(m)?'bg-emerald-600 text-white border-emerald-600':'bg-white text-emerald-700 border-emerald-200'}`}>{m}{isEditing && <X size={8} className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full"/>}</button>))}</div></div>}
+                 {showMachine && <div><p className="text-[10px] font-bold text-emerald-600 mb-2 uppercase opacity-70">Machine</p><div className="flex flex-wrap gap-2">{moveLibrary.machine.map(m => (<button key={m} onClick={()=>toggleMove(m)} className={`relative px-3 py-1 rounded-full text-xs border transition-all ${isEditing?'bg-red-50 border-red-200 text-red-500':''} ${!isEditing && selectedMoves.includes(m)?'bg-emerald-600 text-white border-emerald-600':'bg-white text-emerald-700 border-emerald-200'}`}>{m}{isEditing && <X size={8} className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full"/>}</button>))}</div></div>}
+              </div>
+            )}
+            <button onClick={handleSave} className={`w-full mt-6 ${theme.btn} text-white py-4 rounded-2xl font-bold shadow-xl shadow-emerald-200 hover:shadow-2xl hover:-translate-y-1 transition-all flex justify-center items-center gap-2 tracking-wide`}>
+              <Sparkles size={18}/> Confirm & Log Day
+            </button>
           </div>
         </div>
+        
+        {/* Right: Energy Dashboard & Summary */}
         <div className="space-y-6">
-           <div className="glass-card p-6 h-64 flex flex-col"><h4 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4">Weight Trend</h4><div className="flex-1"><ResponsiveContainer width="100%" height="100%"><LineChart data={history}><YAxis hide domain={['dataMin-1','dataMax+1']}/><Tooltip contentStyle={{borderRadius:'12px', border:'none', boxShadow:'0 10px 30px -10px rgba(0,0,0,0.1)'}}/><Line type="monotone" dataKey="weight" stroke="#10b981" strokeWidth={3} dot={{r:4, fill:'#10b981', strokeWidth:0}} activeDot={{r:6}}/></LineChart></ResponsiveContainer></div></div>
-           <div className="glass-card p-6 bg-gray-900/95 text-white backdrop-blur-md border-none"><h3 className="font-bold text-emerald-400 mb-6 text-sm tracking-widest flex items-center gap-2"><Zap size={14}/> NUTRITION AGGREGATE</h3><div className="space-y-4 text-sm font-light text-gray-300">
-             <div className="border-b border-gray-800 pb-2"><div className="flex justify-between mb-1"><span className="text-yellow-400 font-bold text-xs uppercase">Carbs</span> <span className="text-white font-mono">{summary.carbs.length} items</span></div><div className="text-xs text-gray-500 leading-relaxed">{summary.carbs.join(', ') || 'None'}</div></div>
-             <div className="border-b border-gray-800 pb-2"><div className="flex justify-between mb-1"><span className="text-red-400 font-bold text-xs uppercase">Protein</span> <span className="text-white font-mono">{summary.protein.length} items</span></div><div className="text-xs text-gray-500 leading-relaxed">{summary.protein.join(', ') || 'None'}</div></div>
-             <div className="border-b border-gray-800 pb-2"><div className="flex justify-between mb-1"><span className="text-emerald-400 font-bold text-xs uppercase">Veggie</span> <span className="text-white font-mono">{summary.veggie.length} items</span></div><div className="text-xs text-gray-500 leading-relaxed">{summary.veggie.join(', ') || 'None'}</div></div>
-             {/* 🍎 FRUIT ADDED HERE */}
-             <div className="border-b border-gray-800 pb-2"><div className="flex justify-between mb-1"><span className="text-pink-400 font-bold text-xs uppercase">Fruit</span> <span className="text-white font-mono">{summary.fruit.length} items</span></div><div className="text-xs text-gray-500 leading-relaxed">{summary.fruit.join(', ') || 'None'}</div></div>
-             <div className="pt-2"><span className="text-blue-400 font-bold text-xs uppercase block mb-1">Workout & Routine</span><div className="text-white text-lg font-medium">{build.workout.join(' + ') || 'Rest Day'}</div>{selectedMoves.length > 0 && <div className="text-xs text-blue-200 mt-1 italic opacity-80">{selectedMoves.join(' • ')}</div>}</div>
-           </div></div>
+           {/* 🔥 ENERGY CARD */}
+           <div className="glass-card p-6 bg-gradient-to-br from-gray-900 to-gray-800 text-white border-none shadow-2xl">
+              <h3 className="font-bold text-emerald-400 mb-6 text-sm tracking-widest flex items-center gap-2"><Flame size={14}/> ENERGY BALANCE</h3>
+              
+              <div className="flex justify-between items-end mb-4">
+                <div><div className="text-xs text-gray-400 mb-1">INTAKE</div><div className="text-xl font-bold">{totalIntake} <span className="text-xs font-normal text-gray-500">kcal</span></div></div>
+                <div className="text-right"><div className="text-xs text-gray-400 mb-1">BURN (BMR+Ex)</div><div className="text-xl font-bold">{totalBurn} <span className="text-xs font-normal text-gray-500">kcal</span></div></div>
+              </div>
+              
+              {/* Deficit Bar */}
+              <div className="h-3 bg-gray-700 rounded-full overflow-hidden mb-2 relative">
+                 <div className="absolute top-0 left-0 h-full bg-red-500 transition-all" style={{width: `${Math.min(100, (totalIntake/totalBurn)*100)}%`}}></div>
+              </div>
+              <div className="flex justify-between text-xs font-mono">
+                 <span className="text-gray-400">DEFICIT TARGET</span>
+                 <span className={deficit > 0 ? "text-emerald-400 font-bold" : "text-red-400 font-bold"}>
+                   {deficit > 0 ? `-${deficit} kcal 🔥` : `+${Math.abs(deficit)} kcal ⚠️`}
+                 </span>
+              </div>
+           </div>
+
+           {/* Detail Summary */}
+           <div className="glass-card p-6 bg-white/40 backdrop-blur-md">
+              <h3 className="font-bold text-gray-600 mb-4 text-xs tracking-widest uppercase flex items-center gap-2"><Utensils size={12}/> Breakdown</h3>
+              <div className="space-y-3 text-sm">
+                <div className="flex justify-between"><span className="text-yellow-600 font-bold text-xs uppercase">Carbs</span> <span className="font-mono text-gray-700">{intakeStats.carbs} kcal</span></div>
+                <div className="flex justify-between"><span className="text-red-600 font-bold text-xs uppercase">Protein</span> <span className="font-mono text-gray-700">{intakeStats.protein} kcal</span></div>
+                <div className="flex justify-between"><span className="text-emerald-600 font-bold text-xs uppercase">Veggie</span> <span className="font-mono text-gray-700">{intakeStats.veggie} kcal</span></div>
+                <div className="flex justify-between"><span className="text-pink-600 font-bold text-xs uppercase">Fruit</span> <span className="font-mono text-gray-700">{intakeStats.fruit} kcal</span></div>
+                <div className="pt-2 border-t border-gray-200 mt-2"><span className="text-blue-600 font-bold text-xs uppercase">Active Burn</span> <div className="text-gray-800 font-bold">{activeBurn} kcal</div></div>
+              </div>
+           </div>
+
+           <div className="glass-card p-6 h-48 flex flex-col">
+              <h4 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4">Trend</h4>
+              <div className="flex-1"><ResponsiveContainer width="100%" height="100%"><LineChart data={history}><YAxis hide domain={['dataMin-1','dataMax+1']}/><Tooltip contentStyle={{borderRadius:'12px', border:'none', boxShadow:'0 10px 30px -10px rgba(0,0,0,0.1)'}}/><Line type="monotone" dataKey="weight" stroke="#10b981" strokeWidth={3} dot={false}/></LineChart></ResponsiveContainer></div>
+           </div>
         </div>
       </div>
     </div>
@@ -182,7 +321,7 @@ const BodyModule = ({ goBack, addXP }) => {
 };
 
 // ==========================================
-// 🧠 模块 2: Mind Protocol
+// 🧠 模块 2: Mind Protocol (Mobile Fixes)
 // ==========================================
 const MindModule = ({ goBack, addXP }) => {
   const theme = THEMES.mind;
@@ -198,12 +337,12 @@ const MindModule = ({ goBack, addXP }) => {
   const TABS = { reading: { label: 'Reading', icon: BookOpen }, weakness: { label: 'Weakness', icon: AlertTriangle }, logic: { label: 'Logic', icon: Lightbulb }, music: { label: 'Flow', icon: Mic } };
 
   return (
-    <div className={`min-h-screen bg-gradient-to-br ${theme.bg} p-6 relative overflow-hidden font-sans`}>
+    <div className={`min-h-screen bg-gradient-to-br ${theme.bg} p-4 lg:p-6 relative overflow-x-hidden font-sans`}>
       <BackgroundBlobs color="bg-indigo-300" />
       <Header title="Mind Protocol" icon={Brain} theme={theme} goBack={goBack} />
-      <div className="max-w-3xl mx-auto relative z-10">
-        <div className="flex justify-center mb-8"><div className="glass-card p-1.5 flex gap-1 rounded-2xl">{Object.entries(TABS).map(([key, conf]) => (<button key={key} onClick={() => setActiveTab(key)} className={`flex items-center gap-2 px-6 py-3 rounded-xl transition-all duration-300 text-sm font-medium ${activeTab === key ? 'bg-white shadow-lg text-blue-600' : 'text-gray-500 hover:text-gray-700 hover:bg-white/50'}`}><conf.icon size={16} /> {conf.label}</button>))}</div></div>
-        <div className="glass-card p-8 mb-10 transition-all duration-500">
+      <div className="max-w-3xl mx-auto relative z-10 pb-20">
+        <div className="flex justify-center mb-8 overflow-x-auto"><div className="glass-card p-1.5 flex gap-1 rounded-2xl min-w-max">{Object.entries(TABS).map(([key, conf]) => (<button key={key} onClick={() => setActiveTab(key)} className={`flex items-center gap-2 px-4 lg:px-6 py-3 rounded-xl transition-all duration-300 text-sm font-medium ${activeTab === key ? 'bg-white shadow-lg text-blue-600' : 'text-gray-500 hover:text-gray-700 hover:bg-white/50'}`}><conf.icon size={16} /> {conf.label}</button>))}</div></div>
+        <div className="glass-card p-6 lg:p-8 mb-10 transition-all duration-500">
            {activeTab === 'reading' && (<div className="space-y-4 animate-fade-in"><input placeholder="📖 Book Title" value={inputs.title} onChange={e=>setInputs({...inputs, title:e.target.value})} className="w-full bg-white/50 border-none p-4 rounded-xl text-lg font-medium focus:ring-2 focus:ring-blue-200"/><textarea placeholder="❝ Excerpt..." value={inputs.excerpt} onChange={e=>setInputs({...inputs, excerpt:e.target.value})} className="w-full bg-white/50 border-none p-4 rounded-xl focus:ring-2 focus:ring-blue-200 min-h-[100px]" /><textarea placeholder="💡 Thoughts..." value={inputs.thoughts} onChange={e=>setInputs({...inputs, thoughts:e.target.value})} className="w-full bg-blue-50/50 border-none p-4 rounded-xl focus:ring-2 focus:ring-blue-200 min-h-[80px] text-blue-900" /></div>)}
            {activeTab === 'weakness' && (<div className="grid md:grid-cols-2 gap-6 animate-fade-in"><div className="bg-red-50/50 p-4 rounded-2xl border border-red-100"><span className="text-xs font-bold text-red-400 uppercase tracking-wider mb-2 block">Trigger (Ego)</span><textarea value={inputs.trigger} onChange={e=>setInputs({...inputs, trigger:e.target.value})} className="w-full bg-transparent border-none p-0 focus:ring-0 text-gray-700" rows={4}/></div><div className="bg-emerald-50/50 p-4 rounded-2xl border border-emerald-100"><span className="text-xs font-bold text-emerald-400 uppercase tracking-wider mb-2 block">Correction (Truth)</span><textarea value={inputs.correction} onChange={e=>setInputs({...inputs, correction:e.target.value})} className="w-full bg-transparent border-none p-0 focus:ring-0 text-gray-700" rows={4}/></div></div>)}
            {activeTab === 'logic' && (<div className="space-y-4 animate-fade-in font-mono text-sm"><div className="bg-white/50 p-4 rounded-xl border-l-4 border-purple-400"><span className="text-xs text-purple-400 font-bold block mb-1">// PREMISE</span><input value={inputs.premise} onChange={e=>setInputs({...inputs, premise:e.target.value})} className="w-full bg-transparent border-none focus:ring-0 p-0"/></div><div className="bg-white/50 p-4 rounded-xl border-l-4 border-purple-700"><span className="text-xs text-purple-700 font-bold block mb-1">// CONCLUSION</span><input value={inputs.conclusion} onChange={e=>setInputs({...inputs, conclusion:e.target.value})} className="w-full bg-transparent border-none focus:ring-0 p-0"/></div></div>)}
@@ -234,10 +373,10 @@ const MusicModule = ({ goBack, addXP }) => {
   const updateProj = (id, s, p) => { setProjects(projects.map(pr => pr.id === id ? { ...pr, status: s, progress: p } : pr)); if(s==='Done') addXP(50); };
 
   return (
-    <div className={`min-h-screen bg-gradient-to-br ${theme.bg} p-6 relative overflow-hidden font-sans`}>
+    <div className={`min-h-screen bg-gradient-to-br ${theme.bg} p-4 lg:p-6 relative overflow-x-hidden font-sans`}>
       <BackgroundBlobs color="bg-amber-300" />
       <Header title="Music Band" icon={Music} theme={theme} goBack={goBack} />
-      <div className="max-w-4xl mx-auto relative z-10">
+      <div className="max-w-4xl mx-auto relative z-10 pb-20">
         <div className="flex justify-center mb-8"><div className="glass-card p-1.5 flex gap-1 rounded-2xl"><button onClick={()=>setMode('practice')} className={`px-6 py-3 rounded-xl text-sm font-bold transition-all ${mode==='practice'?'bg-white shadow text-amber-600':'text-gray-500 hover:text-gray-700'}`}>Practice Log</button><button onClick={()=>setMode('project')} className={`px-6 py-3 rounded-xl text-sm font-bold transition-all ${mode==='project'?'bg-white shadow text-amber-600':'text-gray-500 hover:text-gray-700'}`}>Project Tracker</button></div></div>
         
         {mode === 'practice' ? (
@@ -272,10 +411,10 @@ const AILabModule = ({ goBack }) => {
   const handleSearch = () => { if (!query) return; setLoading(true); setTimeout(() => { setResults([{ title: `${query} Deep Dive`, url: 'https://wiki.com/core', summary: 'AI has aggregated key insights...' }, { title: `Advanced techniques for ${query}`, url: 'https://learn.com', summary: 'Top experts recommend...' }]); setLoading(false); }, 1500); };
   
   return (
-    <div className={`min-h-screen bg-gradient-to-br ${theme.bg} p-6 relative overflow-hidden font-sans`}>
+    <div className={`min-h-screen bg-gradient-to-br ${theme.bg} p-4 lg:p-6 relative overflow-x-hidden font-sans`}>
       <BackgroundBlobs color="bg-fuchsia-300" />
       <Header title="AI Researcher" icon={Bot} theme={theme} goBack={goBack} />
-      <div className="max-w-3xl mx-auto relative z-10">
+      <div className="max-w-3xl mx-auto relative z-10 pb-20">
         <div className="glass-card p-10 text-center mb-8"><h2 className="text-2xl font-black text-gray-800 mb-2">Knowledge Hunter</h2><p className="text-gray-500 mb-6">Deploy autonomous agents to scour the web.</p><div className="flex gap-2 max-w-lg mx-auto relative"><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Enter research topic..." className="flex-1 p-4 rounded-2xl bg-white/50 border-none focus:ring-2 focus:ring-fuchsia-300 text-lg shadow-inner"/><button onClick={handleSearch} disabled={loading} className={`${theme.btn} text-white px-8 rounded-2xl font-bold shadow-lg`}>{loading?'...':'Deploy'}</button></div></div>
         <div className="space-y-4">{results.map((r,i) => (<div key={i} className="glass-card p-6 hover:scale-[1.01] transition-transform"><h3 className="font-bold text-lg text-gray-800 mb-1">{r.title}</h3><a href="#" className="text-xs text-fuchsia-500 font-bold uppercase tracking-wider mb-3 block">Source Analyzed</a><p className="text-sm text-gray-600 leading-relaxed bg-white/40 p-4 rounded-xl">{r.summary}</p></div>))}</div>
       </div>
@@ -292,20 +431,20 @@ const Dashboard = ({ setView, xp, level, progress }) => {
   const yearProgress = ((new Date() - new Date('2026-01-01')) / (new Date('2026-12-31') - new Date('2026-01-01'))) * 100;
 
   return (
-    <div className="min-h-screen bg-slate-50 relative overflow-hidden font-sans">
+    <div className="min-h-screen bg-slate-50 relative overflow-x-hidden font-sans">
       <div className="absolute top-0 left-0 w-full h-96 bg-gradient-to-b from-gray-200 to-transparent opacity-50 z-0"></div>
       <div className="absolute top-[-100px] right-[-100px] w-96 h-96 bg-blue-200 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-blob"></div>
       <div className="absolute top-[-100px] left-[-100px] w-96 h-96 bg-purple-200 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-blob animation-delay-2000"></div>
       <div className="max-w-5xl mx-auto p-6 relative z-10">
-        <header className="flex justify-between items-end mb-12 mt-4">
+        <header className="flex flex-col lg:flex-row justify-between items-end mb-12 mt-4 gap-4 lg:gap-0">
           <div><h1 className="text-5xl font-black text-gray-900 tracking-tighter mb-2">2026 <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-purple-600">Life OS</span></h1><p className="text-gray-500 font-medium">Architecture of Self-Reconstruction</p></div>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-4 w-full lg:w-auto justify-end">
              <DataManager />
              <div className="glass-card px-5 py-3 flex items-center gap-4 rounded-full"><div className="text-right"><div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Level {level}</div><div className="text-sm font-black text-gray-800">{xp} XP</div></div><div className="w-10 h-10 rounded-full bg-gradient-to-tr from-yellow-400 to-orange-500 flex items-center justify-center shadow-lg shadow-orange-200 text-white font-bold"><Trophy size={18}/></div></div>
           </div>
         </header>
-        <div className="glass-card p-6 mb-8 overflow-hidden"><div className="flex justify-between items-center mb-4"><h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest flex items-center gap-2"><Zap size={14} className="text-yellow-500"/> Consistency Flow</h3><span className="text-xs font-medium text-gray-500">{Math.max(0, yearProgress).toFixed(1)}% Year Gone</span></div><div className="flex gap-1.5 min-w-max pb-2">{heatmap.map((d, i) => (<div key={i} title={`${d.date}: ${d.count}`} className={`w-8 h-12 rounded-lg transition-all duration-500 hover:scale-110 ${d.count===0?'bg-gray-100': d.count<2?'bg-blue-200': d.count<4?'bg-blue-400':'bg-blue-600 shadow-lg shadow-blue-200'}`}></div>))}</div></div>
-        <div className="grid md:grid-cols-2 gap-6 pb-12"><ModuleCard title="Body OS" desc="Sculpt the vessel." icon={Dumbbell} theme={THEMES.body} onClick={() => setView('body')} /><ModuleCard title="Mind Protocol" desc="Debug internal monologue." icon={Brain} theme={THEMES.mind} onClick={() => setView('mind')} /><ModuleCard title="Music Band" desc="Find rhythm in chaos." icon={Music} theme={THEMES.music} onClick={() => setView('music')} /><ModuleCard title="AI Lab" desc="Extend your cognition." icon={Bot} theme={THEMES.ai} onClick={() => setView('ai')} /></div>
+        <div className="glass-card p-6 mb-8 overflow-hidden"><div className="flex justify-between items-center mb-4"><h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest flex items-center gap-2"><Zap size={14} className="text-yellow-500"/> Consistency Flow</h3><span className="text-xs font-medium text-gray-500">{Math.max(0, yearProgress).toFixed(1)}% Year Gone</span></div><div className="flex gap-1.5 min-w-max pb-2 overflow-x-auto">{heatmap.map((d, i) => (<div key={i} title={`${d.date}: ${d.count}`} className={`w-8 h-12 rounded-lg transition-all duration-500 hover:scale-110 ${d.count===0?'bg-gray-100': d.count<2?'bg-blue-200': d.count<4?'bg-blue-400':'bg-blue-600 shadow-lg shadow-blue-200'}`}></div>))}</div></div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pb-20"><ModuleCard title="Body OS" desc="Sculpt the vessel." icon={Dumbbell} theme={THEMES.body} onClick={() => setView('body')} /><ModuleCard title="Mind Protocol" desc="Debug internal monologue." icon={Brain} theme={THEMES.mind} onClick={() => setView('mind')} /><ModuleCard title="Music Band" desc="Find rhythm in chaos." icon={Music} theme={THEMES.music} onClick={() => setView('music')} /><ModuleCard title="AI Lab" desc="Extend your cognition." icon={Bot} theme={THEMES.ai} onClick={() => setView('ai')} /></div>
       </div>
     </div>
   );
