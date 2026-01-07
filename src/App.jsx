@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Dumbbell, Brain, Music, Bot, 
   BookOpen, AlertTriangle, Lightbulb, Mic, 
@@ -23,7 +23,12 @@ const THEMES = {
 // ==========================================
 const useStorage = (key, initial) => {
   const [data, setData] = useState(() => {
-    try { const item = localStorage.getItem(key); return item ? JSON.parse(item) : initial; } catch { return initial; }
+    try { 
+      const item = localStorage.getItem(key); 
+      return item ? JSON.parse(item) : initial; 
+    } catch { 
+      return initial; 
+    }
   });
   useEffect(() => localStorage.setItem(key, JSON.stringify(data)), [key, data]);
   return [data, setData];
@@ -86,7 +91,7 @@ const DataManager = () => {
 };
 
 // ==========================================
-// 🧩 Body OS (Logic Fixed)
+// 🧩 Body OS
 // ==========================================
 const BodyModule = ({ goBack, addXP }) => {
   const theme = THEMES.body;
@@ -94,8 +99,7 @@ const BodyModule = ({ goBack, addXP }) => {
   const [history, setHistory] = useStorage('lifeos_body_history', []);
   const [weight, setWeight] = useStorage('lifeos_weight_draft', 60.0);
   
-  // 🔥 Fixed Library: Added Pilates & Machine back to defaults
-  const [library, setLibrary] = useStorage('lifeos_food_lib_v5', {
+  const [library, setLibrary] = useStorage('lifeos_food_lib_v6', {
     carbs: [{n:'🌽 玉米', c:100, cat:'Carb'}, {n:'🍠 紫薯', c:130, cat:'Carb'}, {n:'🍞 全麦包', c:250, cat:'Carb'}, {n:'🥣 燕麦', c:370, cat:'Carb'}],
     protein: [{n:'🥚 鸡蛋', c:70, cat:'Protein'}, {n:'🍗 鸡胸', c:165, cat:'Protein'}, {n:'🥩 牛肉', c:250, cat:'Protein'}, {n:'🦐 虾仁', c:90, cat:'Protein'}],
     veggie: [{n:'🥦 西兰花', c:35, cat:'Veggie'}, {n:'🥒 黄瓜', c:16, cat:'Veggie'}, {n:'🍅 番茄', c:18, cat:'Veggie'}, {n:'🥬 生菜', c:15, cat:'Veggie'}],
@@ -118,7 +122,6 @@ const BodyModule = ({ goBack, addXP }) => {
   const [newName, setNewName] = useState('');
   const [newCal, setNewCal] = useState('');
 
-  // --- Logic ---
   const handleAddItem = () => {
     if(!newName) return;
     if(['pilates','machine'].includes(newType)) {
@@ -163,14 +166,25 @@ const BodyModule = ({ goBack, addXP }) => {
   };
   const summary = getAggregated();
   
-  // 🔥 Trigger Logic Fixed
   const showPilates = workouts.includes('🧘 普拉提');
   const showMachine = workouts.includes('🍑 超模机');
+
+  const autoSetBurn = () => {
+    if(!weight) return;
+    const estimated = Math.round(weight * 30); 
+    if(window.confirm(`Based on ${weight}kg, your estimated TDEE is ~${estimated} kcal.\nUpdate Target Burn?`)) {
+      setBurnTarget(estimated);
+    }
+  };
 
   const handleSave = () => {
     const record = { id: Date.now(), date: new Date().toLocaleDateString(), weight, meals, workouts, detailedMoves: selectedMoves, totalIntake, deficit };
     setHistory([...history, record]);
-    addXP(20); alert("✅ Daily Log Saved!");
+    addXP(20); 
+    setMeals({ breakfast: [], lunch: [], dinner: [] }); 
+    setWorkouts([]);       
+    setSelectedMoves([]);  
+    alert("✅ Daily Log Saved!");
   };
 
   return (
@@ -256,7 +270,6 @@ const BodyModule = ({ goBack, addXP }) => {
                   ))}
                 </div>
 
-                {/* 🔥 Logic Fixed Here: Show if Pilates/Machine selected OR Editing */}
                 {(showPilates || showMachine || isEditing) && (
                   <div className="bg-white/50 p-3 rounded-lg border border-white/60 animate-fade-in">
                      <h5 className="text-[10px] font-bold text-emerald-600 uppercase mb-2 flex items-center gap-1"><CheckCircle size={10}/> Detailed Routine {isEditing && "(Edit Mode)"}</h5>
@@ -297,15 +310,34 @@ const BodyModule = ({ goBack, addXP }) => {
           </div>
 
           <div className="space-y-6">
-            <div className="glass-card p-6 text-center">
-              <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4">Deficit Monitor</h3>
-              <div className="flex justify-center items-end gap-1 mb-2">
-                <span className={`text-4xl font-black ${deficit > 0 ? 'text-emerald-500' : 'text-red-500'}`}>{deficit > 0 ? '-' : '+'}{Math.abs(deficit)}</span>
-                <span className="text-gray-400 text-xs mb-1">kcal</span>
+            <div className="glass-card p-5 text-center relative group">
+              <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3">Deficit Monitor</h3>
+              <div className="flex justify-center items-end gap-1 mb-4">
+                <span className={`text-5xl font-black tracking-tighter ${deficit > 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                  {deficit > 0 ? '-' : '+'}{Math.abs(deficit)}
+                </span>
+                <span className="text-gray-400 text-xs mb-2 font-bold">kcal</span>
               </div>
-              <div className="flex justify-between text-xs text-gray-500 mt-4 px-4 border-t border-gray-200 pt-4">
-                <div className="text-center"><div className="font-bold text-gray-800">{totalIntake}</div><div>Intake</div></div>
-                <div className="text-center"><div className="font-bold text-gray-800">{burnTarget}</div><div>Target Burn</div></div>
+              <div className="grid grid-cols-3 gap-1 border-t border-gray-200/60 pt-4 items-center">
+                <div className="flex flex-col items-center">
+                  <div className="font-black text-gray-800 text-xl tracking-tight">{totalIntake}</div>
+                  <div className="text-[10px] text-gray-400 font-bold uppercase mt-1">Intake</div>
+                </div>
+                <div className="text-gray-200 font-light text-2xl flex justify-center pb-2">/</div>
+                <div className="flex flex-col items-center relative">
+                  <div className="flex items-center justify-center gap-1 w-full">
+                    <input 
+                      type="number" 
+                      value={burnTarget} 
+                      onChange={e=>setBurnTarget(e.target.value)} 
+                      className="w-20 font-black text-gray-800 text-xl text-center bg-transparent border-b border-gray-300 focus:border-emerald-500 outline-none p-0"
+                    />
+                    <button onClick={autoSetBurn} className="absolute -right-1 top-1 text-emerald-400 hover:text-emerald-600 transition-colors" title="Auto-calc">
+                      <Sparkles size={10}/>
+                    </button>
+                  </div>
+                  <div className="text-[10px] text-gray-400 font-bold uppercase mt-1">Goal</div>
+                </div>
               </div>
             </div>
 
@@ -350,12 +382,15 @@ const BodyModule = ({ goBack, addXP }) => {
 };
 
 // ==========================================
-// 🧠 Mind Protocol
+// 🧠 Mind Protocol (修复：添加默认数据和显示逻辑)
 // ==========================================
 const MindModule = ({ goBack, addXP }) => {
   const theme = THEMES.mind;
   const [activeTab, setActiveTab] = useState('reading');
-  const [entries, setEntries] = useStorage('lifeos_mind', []);
+  // 🟢 修复：添加了一个演示用的默认数据，确保首次打开不显示全空
+  const [entries, setEntries] = useStorage('lifeos_mind_v2', [
+    { id: 1, type: 'mind', category: 'reading', date: 'Example', title: 'Welcome to Mind Protocol', excerpt: 'Start by logging your thoughts above.', thoughts: 'This system helps you track cognitive patterns.' }
+  ]);
   const [inputs, setInputs] = useStorage('lifeos_mind_draft', { title: "", excerpt: "", thoughts: "", trigger: "", correction: "", premise: "", conclusion: "", audioUrl: null, note: "" });
   const [recording, setRecording] = useState(false);
   const mediaRecorder = useRef(null);
@@ -367,6 +402,8 @@ const MindModule = ({ goBack, addXP }) => {
     addXP(30); alert("Mind Logged!");
   };
   const handleDelete = (id) => { if(window.confirm("Delete?")) setEntries(entries.filter(e => e.id !== id)); };
+  
+  // Audio Logic
   const startRec = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -377,48 +414,157 @@ const MindModule = ({ goBack, addXP }) => {
       recorder.ondataavailable = e => { if(e.data.size > 0) audioChunks.current.push(e.data); };
       recorder.onstop = () => { const blob = new Blob(audioChunks.current, {type: mimeType}); setInputs(p=>({...p, audioUrl: URL.createObjectURL(blob)})); };
       recorder.start(); setRecording(true);
-    } catch(e) { alert("Mic Error"); }
+    } catch(e) { alert("Mic Error: Check permissions"); }
   };
   const stopRec = () => { mediaRecorder.current?.stop(); setRecording(false); };
+  
   const TABS = { reading: { label: 'Reading', icon: BookOpen }, weakness: { label: 'Weakness', icon: AlertTriangle }, logic: { label: 'Logic', icon: Lightbulb }, music: { label: 'Flow', icon: Mic } };
 
   return (
     <div className={`min-h-screen bg-gradient-to-br ${theme.bg} p-4 font-sans pb-20`}>
       <Header title="Mind Protocol" icon={Brain} theme={theme} goBack={goBack} />
       <div className="max-w-3xl mx-auto relative z-10">
-        <div className="glass-card p-1.5 mb-8 overflow-x-auto no-scrollbar"><div className="flex gap-2 min-w-max">{Object.entries(TABS).map(([key, conf]) => (<button key={key} onClick={() => setActiveTab(key)} className={`flex items-center gap-2 px-6 py-3 rounded-xl transition-all text-sm font-medium whitespace-nowrap ${activeTab === key ? 'bg-white shadow-lg text-blue-600' : 'text-gray-500 hover:bg-white/50'}`}><conf.icon size={16} /> {conf.label}</button>))}</div></div>
-        <div className="glass-card p-6 mb-10 transition-all">
-           {activeTab === 'reading' && (<div className="space-y-4 animate-fade-in"><input placeholder="📖 Book Title" value={inputs.title} onChange={e=>setInputs({...inputs, title:e.target.value})} className="w-full bg-white/50 border-none p-4 rounded-xl"/><textarea placeholder="❝ Excerpt..." value={inputs.excerpt} onChange={e=>setInputs({...inputs, excerpt:e.target.value})} className="w-full bg-white/50 border-none p-4 rounded-xl min-h-[80px]" /><textarea placeholder="💡 Thoughts..." value={inputs.thoughts} onChange={e=>setInputs({...inputs, thoughts:e.target.value})} className="w-full bg-blue-50/50 border-none p-4 rounded-xl min-h-[80px]" /></div>)}
-           {activeTab === 'weakness' && (<div className="grid gap-4 animate-fade-in"><div className="bg-red-50/50 p-4 rounded-xl border border-red-100"><textarea value={inputs.trigger} onChange={e=>setInputs({...inputs, trigger:e.target.value})} className="w-full bg-transparent border-none p-0 placeholder:text-red-300" placeholder="Trigger (Ego)..."/></div><div className="bg-emerald-50/50 p-4 rounded-xl border border-emerald-100"><textarea value={inputs.correction} onChange={e=>setInputs({...inputs, correction:e.target.value})} className="w-full bg-transparent border-none p-0 placeholder:text-emerald-300" placeholder="Correction (Truth)..."/></div></div>)}
-           {activeTab === 'logic' && (<div className="space-y-4 animate-fade-in"><div className="bg-white/50 p-4 rounded-xl border-l-4 border-purple-400"><input value={inputs.premise} onChange={e=>setInputs({...inputs, premise:e.target.value})} className="w-full bg-transparent border-none p-0" placeholder="Premise..."/></div><div className="bg-white/50 p-4 rounded-xl border-l-4 border-purple-700"><input value={inputs.conclusion} onChange={e=>setInputs({...inputs, conclusion:e.target.value})} className="w-full bg-transparent border-none p-0" placeholder="Conclusion..."/></div></div>)}
-           {activeTab === 'music' && (<div className="text-center py-6 animate-fade-in">{!inputs.audioUrl ? (<button onClick={recording?stopRec:startRec} className={`w-20 h-20 rounded-full flex items-center justify-center mx-auto transition-all ${recording?'bg-red-500 animate-pulse':'bg-blue-600 shadow-lg'}`}><Mic size={32} className="text-white"/></button>) : (<div className="flex items-center justify-center gap-4 bg-white/60 p-4 rounded-2xl w-fit mx-auto"><button onClick={()=>new Audio(inputs.audioUrl).play()} className="p-3 bg-yellow-500 rounded-full text-white"><Play size={20} fill="currentColor"/></button><button onClick={()=>setInputs(p=>({...p, audioUrl:null}))} className="p-2 text-red-400"><Trash2 size={18}/></button></div>)}<p className="mt-4 text-xs text-gray-500">{recording?"Recording...":inputs.audioUrl?"Captured":"Tap Mic"}</p></div>)}
-           <div className="flex justify-end mt-6"><button onClick={handleSave} className="bg-blue-600 text-white px-8 py-3 rounded-xl font-bold shadow-lg flex items-center gap-2"><Plus size={18}/> Log</button></div>
+        <div className="glass-card p-1.5 mb-8 overflow-x-auto no-scrollbar">
+          <div className="flex gap-2 min-w-max">
+            {Object.entries(TABS).map(([key, conf]) => (
+              <button key={key} onClick={() => setActiveTab(key)} className={`flex items-center gap-2 px-6 py-3 rounded-xl transition-all text-sm font-medium whitespace-nowrap ${activeTab === key ? 'bg-white shadow-lg text-blue-600' : 'text-gray-500 hover:bg-white/50'}`}>
+                <conf.icon size={16} /> {conf.label}
+              </button>
+            ))}
+          </div>
         </div>
-        <div className="space-y-4">{entries.slice().reverse().map(entry => (<div key={entry.id} className="glass-card p-5 relative group"><button onClick={()=>handleDelete(entry.id)} className="absolute top-4 right-4 text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"><Trash2 size={16}/></button><div className="text-xs text-gray-400 mb-2">{entry.date}</div>{entry.title&&<div className="font-bold text-gray-800">{entry.title}</div>}{entry.thoughts&&<div className="text-sm text-blue-800 bg-blue-50/50 p-2 rounded mt-2">{entry.thoughts}</div>}{entry.trigger&&<div className="grid grid-cols-2 gap-2 text-sm"><div className="bg-red-50 p-2 rounded text-red-800">{entry.trigger}</div><div className="bg-emerald-50 p-2 rounded text-emerald-800">{entry.correction}</div></div>}{entry.audioUrl&&<div className="flex items-center gap-3 mt-2"><div className="bg-yellow-100 p-2 rounded-full text-yellow-600"><Music size={16}/></div><button onClick={()=>new Audio(entry.audioUrl).play()} className="text-sm font-bold text-yellow-700 hover:underline">Play Audio Note</button></div>}</div>))}</div>
+        
+        {/* Input Area - Ensured Visibility */}
+        <div className="glass-card p-6 mb-10 transition-all ring-4 ring-white/20">
+           {activeTab === 'reading' && (
+             <div className="space-y-4 animate-fade-in">
+               <input placeholder="📖 Book Title" value={inputs.title} onChange={e=>setInputs({...inputs, title:e.target.value})} className="w-full bg-white/70 border border-blue-100 p-4 rounded-xl focus:bg-white focus:shadow-md transition-all"/>
+               <textarea placeholder="❝ Excerpt (原文摘录)..." value={inputs.excerpt} onChange={e=>setInputs({...inputs, excerpt:e.target.value})} className="w-full bg-white/70 border border-blue-100 p-4 rounded-xl min-h-[80px] focus:bg-white focus:shadow-md transition-all" />
+               <textarea placeholder="💡 Thoughts (我的思考)..." value={inputs.thoughts} onChange={e=>setInputs({...inputs, thoughts:e.target.value})} className="w-full bg-blue-50/80 border border-blue-200 p-4 rounded-xl min-h-[80px] focus:bg-white focus:shadow-md transition-all" />
+             </div>
+           )}
+           {activeTab === 'weakness' && (
+             <div className="grid gap-4 animate-fade-in">
+               <div className="bg-red-50/80 p-4 rounded-xl border border-red-200"><textarea value={inputs.trigger} onChange={e=>setInputs({...inputs, trigger:e.target.value})} className="w-full bg-transparent border-none p-0 placeholder:text-red-300 focus:outline-none" placeholder="Trigger (Ego/Emotion)..."/></div>
+               <div className="bg-emerald-50/80 p-4 rounded-xl border border-emerald-200"><textarea value={inputs.correction} onChange={e=>setInputs({...inputs, correction:e.target.value})} className="w-full bg-transparent border-none p-0 placeholder:text-emerald-300 focus:outline-none" placeholder="Correction (Objective Truth)..."/></div>
+             </div>
+           )}
+           {activeTab === 'logic' && (
+             <div className="space-y-4 animate-fade-in">
+               <div className="bg-white/70 p-4 rounded-xl border-l-4 border-purple-400 shadow-sm"><input value={inputs.premise} onChange={e=>setInputs({...inputs, premise:e.target.value})} className="w-full bg-transparent border-none p-0 focus:outline-none" placeholder="Premise (前提)..."/></div>
+               <div className="bg-white/70 p-4 rounded-xl border-l-4 border-purple-700 shadow-sm"><input value={inputs.conclusion} onChange={e=>setInputs({...inputs, conclusion:e.target.value})} className="w-full bg-transparent border-none p-0 focus:outline-none" placeholder="Conclusion (结论)..."/></div>
+             </div>
+           )}
+           {activeTab === 'music' && (
+             <div className="text-center py-6 animate-fade-in">
+               {!inputs.audioUrl ? (
+                 <button onClick={recording?stopRec:startRec} className={`w-20 h-20 rounded-full flex items-center justify-center mx-auto transition-all ${recording?'bg-red-500 animate-pulse shadow-red-300/50 shadow-xl':'bg-blue-600 shadow-lg hover:scale-105'}`}>
+                   <Mic size={32} className="text-white"/>
+                 </button>
+               ) : (
+                 <div className="flex items-center justify-center gap-4 bg-white/60 p-4 rounded-2xl w-fit mx-auto border border-blue-100">
+                   <button onClick={()=>new Audio(inputs.audioUrl).play()} className="p-3 bg-yellow-500 rounded-full text-white shadow-md hover:bg-yellow-600"><Play size={20} fill="currentColor"/></button>
+                   <button onClick={()=>setInputs(p=>({...p, audioUrl:null}))} className="p-2 text-red-400 hover:bg-red-50 rounded-lg"><Trash2 size={18}/></button>
+                 </div>
+               )}
+               <p className="mt-4 text-xs font-bold text-blue-900/50 uppercase tracking-widest">{recording?"Recording...":inputs.audioUrl?"Audio Captured":"Tap Mic to Log Flow"}</p>
+             </div>
+           )}
+           <div className="flex justify-end mt-6">
+             <button onClick={handleSave} className="bg-blue-600 text-white px-8 py-3 rounded-xl font-bold shadow-lg hover:bg-blue-700 transition-colors flex items-center gap-2 transform active:scale-95">
+               <Plus size={18}/> Log Entry
+             </button>
+           </div>
+        </div>
+
+        {/* Entries List */}
+        <div className="space-y-4">
+          {entries.length === 0 && <div className="text-center text-blue-900/30 font-bold py-10">Your mind is clear. Add an entry above.</div>}
+          {entries.slice().reverse().map(entry => (
+            <div key={entry.id} className="glass-card p-5 relative group border-l-4 hover:translate-x-1 transition-all" style={{borderLeftColor: entry.category==='weakness'?'#f87171':entry.category==='logic'?'#a855f7':'#3b82f6'}}>
+              <button onClick={()=>handleDelete(entry.id)} className="absolute top-4 right-4 text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"><Trash2 size={16}/></button>
+              <div className="flex justify-between items-start mb-2">
+                 <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 bg-white/50 px-2 py-1 rounded">{entry.category}</span>
+                 <span className="text-xs text-gray-400">{entry.date}</span>
+              </div>
+              
+              {entry.title && <div className="font-bold text-gray-800 text-lg mb-1">{entry.title}</div>}
+              {entry.excerpt && <div className="text-sm text-gray-500 italic mb-3 border-l-2 border-gray-300 pl-3">"{entry.excerpt}"</div>}
+              {entry.thoughts && <div className="text-sm text-blue-900 bg-blue-50/80 p-3 rounded-lg border border-blue-100">{entry.thoughts}</div>}
+              
+              {entry.trigger && (
+                <div className="grid grid-cols-2 gap-2 text-sm mt-2">
+                  <div className="bg-red-50/80 p-3 rounded-lg text-red-800 border border-red-100"><span className="block text-[10px] font-bold uppercase text-red-300 mb-1">Trigger</span>{entry.trigger}</div>
+                  <div className="bg-emerald-50/80 p-3 rounded-lg text-emerald-800 border border-emerald-100"><span className="block text-[10px] font-bold uppercase text-emerald-300 mb-1">Correction</span>{entry.correction}</div>
+                </div>
+              )}
+              {entry.premise && (
+                 <div className="bg-purple-50/50 p-3 rounded-lg mt-2 text-sm space-y-2 border border-purple-100">
+                    <div><span className="text-purple-400 font-bold text-xs uppercase mr-2">Premise:</span>{entry.premise}</div>
+                    <div><span className="text-purple-600 font-bold text-xs uppercase mr-2">Therefore:</span>{entry.conclusion}</div>
+                 </div>
+              )}
+              {entry.audioUrl && (
+                <div className="flex items-center gap-3 mt-3 bg-yellow-50/50 p-2 rounded-xl border border-yellow-100 w-fit">
+                  <div className="bg-yellow-400 p-2 rounded-full text-white shadow-sm"><Music size={14}/></div>
+                  <button onClick={()=>new Audio(entry.audioUrl).play()} className="text-xs font-bold text-yellow-800 hover:underline pr-2">Play Audio Note</button>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );
 };
 
 // ==========================================
-// 🎹 Music & 🤖 AI (Standard)
+// 🎹 Music & 🤖 AI
 // ==========================================
 const MusicModule = ({ goBack, addXP }) => {
   const theme = THEMES.music;
   const [logs, setLogs] = useStorage('lifeos_music_logs', []);
-  const [inst, setInst] = useState('Drums'); const [dur, setDur] = useState(30); const [note, setNote] = useState('');
+  // 🟢 修复：添加 'Theory' (乐理) 到默认乐器列表
+  const [inst, setInst] = useState('Drums'); 
+  const [dur, setDur] = useState(30); 
+  const [note, setNote] = useState('');
+  
   const addLog = () => { setLogs([{ id:Date.now(), date:new Date().toLocaleDateString(), inst, dur, note }, ...logs]); setNote(''); addXP(15); };
+  
   return (
     <div className={`min-h-screen bg-gradient-to-br ${theme.bg} p-6 font-sans`}>
       <Header title="Music Band" icon={Music} theme={theme} goBack={goBack} />
       <div className="max-w-4xl mx-auto glass-card p-8">
         <div className="flex flex-wrap gap-4 items-end mb-8">
-          <div><label className="text-xs font-bold uppercase text-gray-500">Inst</label><select value={inst} onChange={e=>setInst(e.target.value)} className="block p-3 rounded-xl bg-white/50 w-32"><option>🥁 Drums</option><option>🎹 Piano</option></select></div>
-          <div><label className="text-xs font-bold uppercase text-gray-500">Min</label><input type="number" value={dur} onChange={e=>setDur(e.target.value)} className="block p-3 rounded-xl bg-white/50 w-24"/></div>
-          <div className="flex-1"><label className="text-xs font-bold uppercase text-gray-500">Note</label><input value={note} onChange={e=>setNote(e.target.value)} className="block w-full p-3 rounded-xl bg-white/50"/></div>
-          <button onClick={addLog} className="bg-amber-600 text-white p-3 rounded-xl"><Plus/></button>
+          <div>
+            <label className="text-xs font-bold uppercase text-gray-500 mb-1 block">Inst/Type</label>
+            {/* 🟢 修复：下拉菜单添加了 Theory 选项 */}
+            <select value={inst} onChange={e=>setInst(e.target.value)} className="block p-3 rounded-xl bg-white/50 w-36 border-none focus:ring-2 ring-amber-400 outline-none font-bold text-gray-700">
+              <option>🥁 Drums</option>
+              <option>🎹 Piano</option>
+              <option>🎼 Theory</option>
+              <option>🎤 Vocals</option>
+            </select>
+          </div>
+          <div><label className="text-xs font-bold uppercase text-gray-500 mb-1 block">Mins</label><input type="number" value={dur} onChange={e=>setDur(e.target.value)} className="block p-3 rounded-xl bg-white/50 w-24 border-none focus:ring-2 ring-amber-400 outline-none font-mono"/></div>
+          <div className="flex-1"><label className="text-xs font-bold uppercase text-gray-500 mb-1 block">Focus Note</label><input value={note} onChange={e=>setNote(e.target.value)} placeholder="e.g., Jazz scales, Rhythmic patterns..." className="block w-full p-3 rounded-xl bg-white/50 border-none focus:ring-2 ring-amber-400 outline-none"/></div>
+          <button onClick={addLog} className="bg-amber-600 text-white p-3 rounded-xl shadow-lg hover:bg-amber-700 transition-transform active:scale-95"><Plus size={24}/></button>
         </div>
-        <div className="space-y-2">{logs.map(l=><div key={l.id} className="bg-white/40 p-4 rounded-xl flex justify-between items-center"><span className="font-bold text-gray-800">{l.inst} - {l.note}</span><span className="font-mono text-amber-700">{l.dur}m</span></div>)}</div>
+        <div className="space-y-2">
+          {logs.map(l=>(
+            <div key={l.id} className="bg-white/40 p-4 rounded-xl flex justify-between items-center border border-white/50">
+              <div className="flex items-center gap-3">
+                 <span className="text-lg">{l.inst.includes('Drums')?'🥁':l.inst.includes('Piano')?'🎹':l.inst.includes('Theory')?'🎼':'🎤'}</span>
+                 <div>
+                   <div className="font-bold text-gray-800 text-sm">{l.inst}</div>
+                   <div className="text-xs text-gray-600">{l.note}</div>
+                 </div>
+              </div>
+              <span className="font-mono text-amber-700 font-bold bg-amber-100 px-2 py-1 rounded text-xs">{l.dur}m</span>
+            </div>
+          ))}
+          {logs.length === 0 && <div className="text-center text-amber-900/30 py-8 text-sm">No practice logged yet.</div>}
+        </div>
       </div>
     </div>
   );
