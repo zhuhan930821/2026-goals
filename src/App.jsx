@@ -38,7 +38,7 @@ const useGamification = () => {
 };
 
 // ==========================================
-// 💾 数据管理 (含恢复出厂)
+// 💾 数据管理
 // ==========================================
 const DataManager = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -59,7 +59,7 @@ const DataManager = () => {
     reader.readAsText(file);
   };
   const handleReset = () => {
-    if(window.confirm("☢️ FACTORY RESET: Are you sure you want to delete EVERYTHING?")) {
+    if(window.confirm("☢️ FACTORY RESET: Delete EVERYTHING?")) {
       localStorage.clear();
       window.location.reload();
     }
@@ -86,39 +86,91 @@ const DataManager = () => {
 };
 
 // ==========================================
-// 🧩 Body OS (双视图：构建 + 历史)
+// 🧩 Body OS (Customization Logic Restored)
 // ==========================================
 const BodyModule = ({ goBack, addXP }) => {
   const theme = THEMES.body;
-  const [activeTab, setActiveTab] = useState('build'); // 'build' | 'history'
+  const [activeTab, setActiveTab] = useState('build');
   const [history, setHistory] = useStorage('lifeos_body_history', []);
   const [weight, setWeight] = useStorage('lifeos_weight_draft', 60.0);
   
-  // 基础库 (分类明确)
-  const [library] = useState({
+  // 🔥 Persistent Libraries (Editable)
+  const [library, setLibrary] = useStorage('lifeos_food_lib_v4', {
     carbs: [{n:'🌽 玉米', c:100, cat:'Carb'}, {n:'🍠 紫薯', c:130, cat:'Carb'}, {n:'🍞 全麦包', c:250, cat:'Carb'}, {n:'🥣 燕麦', c:370, cat:'Carb'}],
     protein: [{n:'🥚 鸡蛋', c:70, cat:'Protein'}, {n:'🍗 鸡胸', c:165, cat:'Protein'}, {n:'🥩 牛肉', c:250, cat:'Protein'}, {n:'🦐 虾仁', c:90, cat:'Protein'}],
     veggie: [{n:'🥦 西兰花', c:35, cat:'Veggie'}, {n:'🥒 黄瓜', c:16, cat:'Veggie'}, {n:'🍅 番茄', c:18, cat:'Veggie'}, {n:'🥬 生菜', c:15, cat:'Veggie'}],
     fruit: [{n:'🍎 苹果', c:50, cat:'Fruit'}, {n:'🫐 蓝莓', c:57, cat:'Fruit'}, {n:'🍌 香蕉', c:90, cat:'Fruit'}],
-    workout: ['🏃 慢跑', '🧘 普拉提', '🍑 超模机', '🏋️ 举铁']
+    workout: ['🏃 慢跑', '🏋️ 举铁'] // Basic workouts
+  });
+  const [moveLibrary, setMoveLibrary] = useStorage('lifeos_move_lib_v4', {
+    pilates: ['百次拍击', '卷腹', '单腿画圈', '十字交叉', '天鹅式'],
+    machine: ['后抬腿', '蚌式开合', '侧向行走', '深蹲行走', '驴踢']
   });
 
+  // Daily Build State
   const [meals, setMeals] = useStorage('lifeos_meals_draft_v3', { breakfast: [], lunch: [], dinner: [] });
   const [workouts, setWorkouts] = useStorage('lifeos_workouts_draft', []);
+  const [selectedMoves, setSelectedMoves] = useStorage('lifeos_moves_draft', []);
   const [burnTarget, setBurnTarget] = useStorage('lifeos_burn_target', 2000);
 
-  // --- Logic ---
+  // Edit Mode State
+  const [isEditing, setIsEditing] = useState(false);
+  const [newType, setNewType] = useState('carbs'); // Category key
+  const [newName, setNewName] = useState('');
+  const [newCal, setNewCal] = useState('');
+
+  // --- Logic: Add/Delete Custom Items ---
+  const handleAddItem = () => {
+    if(!newName) return;
+    
+    // 1. Add to Moves (Pilates/Machine)
+    if(['pilates','machine'].includes(newType)) {
+      setMoveLibrary(prev => ({...prev, [newType]: [...prev[newType], newName]}));
+    } 
+    // 2. Add to Food Library
+    else if(['carbs','protein','veggie','fruit'].includes(newType)) {
+      // Map selector type to internal cat string
+      const catMap = {carbs:'Carb', protein:'Protein', veggie:'Veggie', fruit:'Fruit'};
+      setLibrary(prev => ({...prev, [newType]: [...prev[newType], {n:newName, c:Number(newCal)||0, cat:catMap[newType]}]}));
+    }
+    // 3. Add to General Workout
+    else if(newType === 'workout') {
+      setLibrary(prev => ({...prev, workout: [...prev.workout, newName]}));
+    }
+    
+    setNewName(''); setNewCal(''); alert("Added to Library!");
+  };
+
+  const handleLibClick = (type, item) => {
+    if(isEditing) {
+      // DELETE Logic
+      if(window.confirm(`Delete "${item.n || item}" from library permanently?`)) {
+        if(['pilates','machine'].includes(type)) {
+          setMoveLibrary(prev => ({...prev, [type]: prev[type].filter(i => i !== item)}));
+        } else if(type === 'workout') {
+          setLibrary(prev => ({...prev, workout: prev.workout.filter(i => i !== item)}));
+        } else {
+          setLibrary(prev => ({...prev, [type]: prev[type].filter(i => i.n !== item.n)}));
+        }
+      }
+    } else {
+      // ADD TO DAILY LOG Logic
+      // handled by specific functions below
+    }
+  };
+
+  // --- Logic: Daily Operations ---
   const addFood = (slot, item) => setMeals(prev => ({ ...prev, [slot]: [...prev[slot], { id: Date.now(), name: item.n, cal: item.c, cat: item.cat, qty: 1 }] }));
   const updateFood = (slot, id, field, value) => setMeals(prev => ({ ...prev, [slot]: prev[slot].map(f => f.id === id ? { ...f, [field]: Number(value) } : f) }));
   const removeFood = (slot, id) => setMeals(prev => ({ ...prev, [slot]: prev[slot].filter(f => f.id !== id) }));
+  
   const toggleWorkout = (w) => setWorkouts(prev => prev.includes(w) ? prev.filter(i=>i!==w) : [...prev, w]);
+  const toggleMove = (m) => setSelectedMoves(prev => prev.includes(m) ? prev.filter(i=>i!==m) : [...prev, m]);
 
   // Calculations
   const calculateTotal = (slot) => meals[slot].reduce((sum, item) => sum + (item.cal * item.qty), 0);
   const totalIntake = calculateTotal('breakfast') + calculateTotal('lunch') + calculateTotal('dinner');
   const deficit = burnTarget - totalIntake;
-  
-  // Aggregate for Summary (Category View)
   const getAggregated = () => {
     const all = [...meals.breakfast, ...meals.lunch, ...meals.dinner];
     return {
@@ -129,9 +181,13 @@ const BodyModule = ({ goBack, addXP }) => {
     };
   };
   const summary = getAggregated();
+  
+  // Triggers
+  const showPilates = workouts.includes('🧘 普拉提');
+  const showMachine = workouts.includes('🍑 超模机');
 
   const handleSave = () => {
-    const record = { id: Date.now(), date: new Date().toLocaleDateString(), weight, meals, workouts, totalIntake, deficit };
+    const record = { id: Date.now(), date: new Date().toLocaleDateString(), weight, meals, workouts, detailedMoves: selectedMoves, totalIntake, deficit };
     setHistory([...history, record]);
     addXP(20); alert("✅ Daily Log Saved!");
   };
@@ -150,12 +206,34 @@ const BodyModule = ({ goBack, addXP }) => {
 
       {activeTab === 'build' ? (
         <div className="max-w-6xl mx-auto grid lg:grid-cols-3 gap-6 animate-fade-in">
-          {/* Left: Input Area */}
           <div className="lg:col-span-2 space-y-6">
+            
+            {/* Header + Edit Toggle */}
             <div className="glass-card p-4 flex justify-between items-center">
-               <div className="flex items-center gap-2 text-emerald-800 font-bold"><Activity size={18}/> Morning Weight</div>
-               <div className="flex items-center gap-1"><input type="number" value={weight} onChange={e=>setWeight(e.target.value)} className="w-16 text-right bg-transparent border-b border-emerald-300 font-bold text-xl outline-none"/> kg</div>
+               <div className="flex items-center gap-2 text-emerald-800 font-bold"><Activity size={18}/> Morning Weight <input type="number" value={weight} onChange={e=>setWeight(e.target.value)} className="w-16 text-right bg-transparent border-b border-emerald-300 font-bold text-xl outline-none"/> kg</div>
+               <button onClick={()=>setIsEditing(!isEditing)} className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all flex items-center gap-1 ${isEditing ? 'bg-red-100 text-red-600 border-red-200' : 'bg-white text-gray-500 border-gray-200'}`}>
+                 <Settings size={14}/> {isEditing ? 'Done Editing' : 'Edit Library'}
+               </button>
             </div>
+
+            {/* 🔥 Custom Addition Panel */}
+            {isEditing && (
+              <div className="glass-card p-4 bg-emerald-50/80 border border-emerald-200 animate-fade-in">
+                <h4 className="text-xs font-bold text-emerald-700 uppercase mb-2">➕ Add to Library</h4>
+                <div className="flex gap-2 flex-wrap">
+                  <select value={newType} onChange={e=>setNewType(e.target.value)} className="p-2 rounded-lg text-sm border-none shadow-sm font-bold text-gray-600">
+                    <optgroup label="Food"><option value="carbs">🟡 Carbs</option><option value="protein">🔴 Protein</option><option value="veggie">🟢 Veggie</option><option value="fruit">🍎 Fruit</option></optgroup>
+                    <optgroup label="Exercise"><option value="workout">🔵 Workout</option><option value="pilates">🧘 Pilates Move</option><option value="machine">🍑 Machine Move</option></optgroup>
+                  </select>
+                  <input placeholder="Name (e.g. Quinoa)" value={newName} onChange={e=>setNewName(e.target.value)} className="flex-1 p-2 rounded-lg text-sm border-none shadow-sm"/>
+                  {['carbs','protein','veggie','fruit'].includes(newType) && (
+                    <input placeholder="Cal" type="number" value={newCal} onChange={e=>setNewCal(e.target.value)} className="w-16 p-2 rounded-lg text-sm border-none shadow-sm"/>
+                  )}
+                  <button onClick={handleAddItem} className="bg-emerald-600 text-white px-4 rounded-lg font-bold text-sm shadow-md">Add</button>
+                </div>
+                <p className="text-[10px] text-red-400 mt-2">* Click items below to DELETE them from library while in this mode.</p>
+              </div>
+            )}
 
             <div className="glass-card p-6">
               {['breakfast', 'lunch', 'dinner'].map(slot => (
@@ -164,7 +242,7 @@ const BodyModule = ({ goBack, addXP }) => {
                     <h4 className="font-bold text-emerald-800 uppercase text-xs tracking-wider">{slot}</h4>
                     <span className="text-xs font-mono text-emerald-600">{calculateTotal(slot)} kcal</span>
                   </div>
-                  {/* Selected List */}
+                  {/* List */}
                   <div className="space-y-2 mb-3">
                     {meals[slot].map(item => (
                       <div key={item.id} className="flex items-center gap-2 text-sm bg-white/60 p-2 rounded-lg">
@@ -176,12 +254,15 @@ const BodyModule = ({ goBack, addXP }) => {
                       </div>
                     ))}
                   </div>
-                  {/* Categorized Food Selector */}
+                  {/* Selector (Handles Add & Delete) */}
                   <div className="flex flex-wrap gap-2 pt-2 border-t border-emerald-100">
                     <span className="text-[10px] font-bold text-gray-400 uppercase w-full">Quick Add:</span>
                     {['carbs', 'protein', 'veggie', 'fruit'].map(catKey => library[catKey].map(f => (
-                      <button key={f.n} onClick={()=>addFood(slot, f)} className={`px-2 py-1 rounded text-xs border bg-white/60 hover:brightness-95 transition-colors ${f.cat==='Carb'?'border-yellow-200 text-yellow-700':f.cat==='Protein'?'border-red-200 text-red-700':f.cat==='Veggie'?'border-green-200 text-green-700':'border-pink-200 text-pink-700'}`}>
-                        {f.n}
+                      <button key={f.n} onClick={() => isEditing ? handleLibClick(catKey, f) : addFood(slot, f)} 
+                        className={`relative px-2 py-1 rounded text-xs border transition-colors 
+                        ${isEditing ? 'bg-red-50 border-red-200 text-red-500 cursor-alias' : 'bg-white/60 hover:brightness-95 cursor-pointer'} 
+                        ${!isEditing && f.cat==='Carb'?'border-yellow-200 text-yellow-700':!isEditing && f.cat==='Protein'?'border-red-200 text-red-700':!isEditing && f.cat==='Veggie'?'border-green-200 text-green-700':!isEditing && 'border-pink-200 text-pink-700'}`}>
+                        {f.n} {isEditing && <X size={8} className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full"/>}
                       </button>
                     )))}
                   </div>
@@ -190,12 +271,49 @@ const BodyModule = ({ goBack, addXP }) => {
               
               {/* Workout */}
               <div className="bg-emerald-50/50 p-4 rounded-xl border border-emerald-100 mb-4">
-                <h4 className="font-bold text-emerald-800 text-xs uppercase mb-2">🔥 Workout</h4>
-                <div className="flex flex-wrap gap-2">
+                <h4 className="font-bold text-emerald-800 text-xs uppercase mb-2">🔥 Workout Types</h4>
+                <div className="flex flex-wrap gap-2 mb-4">
                   {library.workout.map(w => (
-                    <button key={w} onClick={()=>toggleWorkout(w)} className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${workouts.includes(w)?'bg-emerald-600 text-white border-emerald-600':'bg-white text-gray-500 border-gray-200'}`}>{w}</button>
+                    <button key={w} onClick={() => isEditing ? handleLibClick('workout', w) : toggleWorkout(w)} 
+                      className={`relative px-3 py-1.5 rounded-lg text-xs font-bold border transition-all 
+                      ${isEditing ? 'bg-red-50 border-red-200 text-red-500' : workouts.includes(w)?'bg-emerald-600 text-white border-emerald-600':'bg-white text-gray-500 border-gray-200'}`}>
+                      {w} {isEditing && <X size={10} className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full"/>}
+                    </button>
                   ))}
                 </div>
+
+                {/* Nested Routines */}
+                {(showPilates || showMachine || isEditing) && (
+                  <div className="bg-white/50 p-3 rounded-lg border border-white/60">
+                     <h5 className="text-[10px] font-bold text-emerald-600 uppercase mb-2 flex items-center gap-1"><CheckCircle size={10}/> Detailed Routine {isEditing && "(Edit Mode)"}</h5>
+                     {(showPilates || isEditing) && (
+                       <div className="mb-2">
+                         <span className="text-[10px] text-gray-400 block mb-1">Pilates:</span>
+                         <div className="flex flex-wrap gap-1">
+                           {moveLibrary.pilates.map(m => (
+                             <button key={m} onClick={() => isEditing ? handleLibClick('pilates', m) : toggleMove(m)} 
+                               className={`relative px-2 py-1 rounded text-[10px] border ${isEditing?'bg-red-50 border-red-200 text-red-500':selectedMoves.includes(m)?'bg-emerald-500 text-white':'bg-white text-gray-600'}`}>
+                               {m} {isEditing && <X size={8} className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full"/>}
+                             </button>
+                           ))}
+                         </div>
+                       </div>
+                     )}
+                     {(showMachine || isEditing) && (
+                       <div>
+                         <span className="text-[10px] text-gray-400 block mb-1">Machine:</span>
+                         <div className="flex flex-wrap gap-1">
+                           {moveLibrary.machine.map(m => (
+                             <button key={m} onClick={() => isEditing ? handleLibClick('machine', m) : toggleMove(m)} 
+                               className={`relative px-2 py-1 rounded text-[10px] border ${isEditing?'bg-red-50 border-red-200 text-red-500':selectedMoves.includes(m)?'bg-emerald-500 text-white':'bg-white text-gray-600'}`}>
+                               {m} {isEditing && <X size={8} className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full"/>}
+                             </button>
+                           ))}
+                         </div>
+                       </div>
+                     )}
+                  </div>
+                )}
               </div>
 
               <button onClick={handleSave} className="w-full bg-emerald-600 text-white py-3 rounded-xl font-bold shadow-lg hover:bg-emerald-700 transition-colors flex justify-center gap-2">
@@ -204,7 +322,6 @@ const BodyModule = ({ goBack, addXP }) => {
             </div>
           </div>
 
-          {/* Right: Dashboard Summary */}
           <div className="space-y-6">
             <div className="glass-card p-6 text-center">
               <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4">Deficit Monitor</h3>
@@ -218,7 +335,6 @@ const BodyModule = ({ goBack, addXP }) => {
               </div>
             </div>
 
-            {/* Categorized Summary (Returned!) */}
             <div className="glass-card p-6 bg-gray-900/95 text-white backdrop-blur-md border-none">
                <h3 className="font-bold text-emerald-400 mb-4 text-xs tracking-widest flex items-center gap-2"><Zap size={14}/> NUTRITION AGGREGATE</h3>
                <div className="space-y-3 text-sm font-light text-gray-300">
@@ -231,7 +347,7 @@ const BodyModule = ({ goBack, addXP }) => {
                      <div className="text-xs text-gray-500 leading-relaxed">{items.map(i=>i.name).join(', ') || 'None'}</div>
                    </div>
                  ))}
-                 <div className="pt-2"><span className="text-blue-400 font-bold text-xs uppercase block mb-1">Workout</span><div className="text-white text-lg font-medium">{workouts.join(' + ') || 'Rest Day'}</div></div>
+                 <div className="pt-2"><span className="text-blue-400 font-bold text-xs uppercase block mb-1">Workout</span><div className="text-white text-lg font-medium">{workouts.join(' + ') || 'Rest Day'}</div>{selectedMoves.length > 0 && <div className="text-xs text-blue-200 mt-1 italic">{selectedMoves.join(' • ')}</div>}</div>
                </div>
             </div>
           </div>
@@ -246,15 +362,14 @@ const BodyModule = ({ goBack, addXP }) => {
                   <span className="font-bold text-gray-800">{log.date}</span>
                   <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-1 rounded font-bold">{log.weight} kg</span>
                 </div>
-                <div className="text-sm text-gray-600">
-                  <span className="font-bold">Workout:</span> {log.workouts.join(', ') || 'Rest'}
-                </div>
-                <div className="text-xs text-gray-400 mt-1">Intake: {log.totalIntake} • Deficit: {log.deficit}</div>
+                <div className="text-sm text-gray-600"><span className="font-bold">Workouts:</span> {log.workouts.join(', ') || 'Rest'}</div>
+                {log.detailedMoves && log.detailedMoves.length > 0 && <div className="text-xs text-gray-400 italic mt-1">{log.detailedMoves.join(', ')}</div>}
+                <div className="text-xs text-gray-400 mt-2 font-mono">Intake: {log.totalIntake} kcal • Deficit: {log.deficit}</div>
               </div>
               <button onClick={()=>{if(window.confirm('Delete?')) setHistory(history.filter(h=>h.id!==log.id))}} className="text-gray-300 hover:text-red-500"><Trash2 size={16}/></button>
             </div>
           ))}
-          {history.length===0 && <div className="text-center text-gray-400 py-10">No history yet. Go build today!</div>}
+          {history.length===0 && <div className="text-center text-gray-400 py-10">No history yet.</div>}
         </div>
       )}
     </div>
