@@ -86,7 +86,7 @@ const DataManager = () => {
 };
 
 // ==========================================
-// 🧩 Body OS (Customization Logic Restored)
+// 🧩 Body OS (Logic Fixed)
 // ==========================================
 const BodyModule = ({ goBack, addXP }) => {
   const theme = THEMES.body;
@@ -94,72 +94,54 @@ const BodyModule = ({ goBack, addXP }) => {
   const [history, setHistory] = useStorage('lifeos_body_history', []);
   const [weight, setWeight] = useStorage('lifeos_weight_draft', 60.0);
   
-  // 🔥 Persistent Libraries (Editable)
-  const [library, setLibrary] = useStorage('lifeos_food_lib_v4', {
+  // 🔥 Fixed Library: Added Pilates & Machine back to defaults
+  const [library, setLibrary] = useStorage('lifeos_food_lib_v5', {
     carbs: [{n:'🌽 玉米', c:100, cat:'Carb'}, {n:'🍠 紫薯', c:130, cat:'Carb'}, {n:'🍞 全麦包', c:250, cat:'Carb'}, {n:'🥣 燕麦', c:370, cat:'Carb'}],
     protein: [{n:'🥚 鸡蛋', c:70, cat:'Protein'}, {n:'🍗 鸡胸', c:165, cat:'Protein'}, {n:'🥩 牛肉', c:250, cat:'Protein'}, {n:'🦐 虾仁', c:90, cat:'Protein'}],
     veggie: [{n:'🥦 西兰花', c:35, cat:'Veggie'}, {n:'🥒 黄瓜', c:16, cat:'Veggie'}, {n:'🍅 番茄', c:18, cat:'Veggie'}, {n:'🥬 生菜', c:15, cat:'Veggie'}],
     fruit: [{n:'🍎 苹果', c:50, cat:'Fruit'}, {n:'🫐 蓝莓', c:57, cat:'Fruit'}, {n:'🍌 香蕉', c:90, cat:'Fruit'}],
-    workout: ['🏃 慢跑', '🏋️ 举铁'] // Basic workouts
+    workout: ['🏃 慢跑', '🧘 普拉提', '🍑 超模机', '🏋️ 举铁'] 
   });
+  
   const [moveLibrary, setMoveLibrary] = useStorage('lifeos_move_lib_v4', {
     pilates: ['百次拍击', '卷腹', '单腿画圈', '十字交叉', '天鹅式'],
     machine: ['后抬腿', '蚌式开合', '侧向行走', '深蹲行走', '驴踢']
   });
 
-  // Daily Build State
   const [meals, setMeals] = useStorage('lifeos_meals_draft_v3', { breakfast: [], lunch: [], dinner: [] });
   const [workouts, setWorkouts] = useStorage('lifeos_workouts_draft', []);
   const [selectedMoves, setSelectedMoves] = useStorage('lifeos_moves_draft', []);
   const [burnTarget, setBurnTarget] = useStorage('lifeos_burn_target', 2000);
 
-  // Edit Mode State
   const [isEditing, setIsEditing] = useState(false);
-  const [newType, setNewType] = useState('carbs'); // Category key
+  const [newType, setNewType] = useState('carbs');
   const [newName, setNewName] = useState('');
   const [newCal, setNewCal] = useState('');
 
-  // --- Logic: Add/Delete Custom Items ---
+  // --- Logic ---
   const handleAddItem = () => {
     if(!newName) return;
-    
-    // 1. Add to Moves (Pilates/Machine)
     if(['pilates','machine'].includes(newType)) {
       setMoveLibrary(prev => ({...prev, [newType]: [...prev[newType], newName]}));
-    } 
-    // 2. Add to Food Library
-    else if(['carbs','protein','veggie','fruit'].includes(newType)) {
-      // Map selector type to internal cat string
+    } else if(['carbs','protein','veggie','fruit'].includes(newType)) {
       const catMap = {carbs:'Carb', protein:'Protein', veggie:'Veggie', fruit:'Fruit'};
       setLibrary(prev => ({...prev, [newType]: [...prev[newType], {n:newName, c:Number(newCal)||0, cat:catMap[newType]}]}));
-    }
-    // 3. Add to General Workout
-    else if(newType === 'workout') {
+    } else if(newType === 'workout') {
       setLibrary(prev => ({...prev, workout: [...prev.workout, newName]}));
     }
-    
-    setNewName(''); setNewCal(''); alert("Added to Library!");
+    setNewName(''); setNewCal(''); alert("Added!");
   };
 
   const handleLibClick = (type, item) => {
     if(isEditing) {
-      // DELETE Logic
-      if(window.confirm(`Delete "${item.n || item}" from library permanently?`)) {
-        if(['pilates','machine'].includes(type)) {
-          setMoveLibrary(prev => ({...prev, [type]: prev[type].filter(i => i !== item)}));
-        } else if(type === 'workout') {
-          setLibrary(prev => ({...prev, workout: prev.workout.filter(i => i !== item)}));
-        } else {
-          setLibrary(prev => ({...prev, [type]: prev[type].filter(i => i.n !== item.n)}));
-        }
+      if(window.confirm(`Delete "${item.n || item}"?`)) {
+        if(['pilates','machine'].includes(type)) setMoveLibrary(prev => ({...prev, [type]: prev[type].filter(i => i !== item)}));
+        else if(type === 'workout') setLibrary(prev => ({...prev, workout: prev.workout.filter(i => i !== item)}));
+        else setLibrary(prev => ({...prev, [type]: prev[type].filter(i => i.n !== item.n)}));
       }
-    } else {
-      // ADD TO DAILY LOG Logic
-      // handled by specific functions below
     }
   };
 
-  // --- Logic: Daily Operations ---
   const addFood = (slot, item) => setMeals(prev => ({ ...prev, [slot]: [...prev[slot], { id: Date.now(), name: item.n, cal: item.c, cat: item.cat, qty: 1 }] }));
   const updateFood = (slot, id, field, value) => setMeals(prev => ({ ...prev, [slot]: prev[slot].map(f => f.id === id ? { ...f, [field]: Number(value) } : f) }));
   const removeFood = (slot, id) => setMeals(prev => ({ ...prev, [slot]: prev[slot].filter(f => f.id !== id) }));
@@ -167,7 +149,6 @@ const BodyModule = ({ goBack, addXP }) => {
   const toggleWorkout = (w) => setWorkouts(prev => prev.includes(w) ? prev.filter(i=>i!==w) : [...prev, w]);
   const toggleMove = (m) => setSelectedMoves(prev => prev.includes(m) ? prev.filter(i=>i!==m) : [...prev, m]);
 
-  // Calculations
   const calculateTotal = (slot) => meals[slot].reduce((sum, item) => sum + (item.cal * item.qty), 0);
   const totalIntake = calculateTotal('breakfast') + calculateTotal('lunch') + calculateTotal('dinner');
   const deficit = burnTarget - totalIntake;
@@ -182,7 +163,7 @@ const BodyModule = ({ goBack, addXP }) => {
   };
   const summary = getAggregated();
   
-  // Triggers
+  // 🔥 Trigger Logic Fixed
   const showPilates = workouts.includes('🧘 普拉提');
   const showMachine = workouts.includes('🍑 超模机');
 
@@ -196,7 +177,6 @@ const BodyModule = ({ goBack, addXP }) => {
     <div className={`min-h-screen bg-gradient-to-br ${theme.bg} p-4 pb-20 font-sans`}>
       <Header title="Body OS" icon={Dumbbell} theme={theme} goBack={goBack} />
       
-      {/* 🟢 Tabs Navigation */}
       <div className="max-w-6xl mx-auto mb-6 flex justify-center">
         <div className="glass-card p-1 flex gap-1 rounded-xl">
           <button onClick={()=>setActiveTab('build')} className={`px-6 py-2 rounded-lg text-sm font-bold transition-all ${activeTab==='build'?'bg-emerald-600 text-white shadow':'text-gray-500 hover:bg-white/50'}`}>🏗️ Daily Build</button>
@@ -207,8 +187,6 @@ const BodyModule = ({ goBack, addXP }) => {
       {activeTab === 'build' ? (
         <div className="max-w-6xl mx-auto grid lg:grid-cols-3 gap-6 animate-fade-in">
           <div className="lg:col-span-2 space-y-6">
-            
-            {/* Header + Edit Toggle */}
             <div className="glass-card p-4 flex justify-between items-center">
                <div className="flex items-center gap-2 text-emerald-800 font-bold"><Activity size={18}/> Morning Weight <input type="number" value={weight} onChange={e=>setWeight(e.target.value)} className="w-16 text-right bg-transparent border-b border-emerald-300 font-bold text-xl outline-none"/> kg</div>
                <button onClick={()=>setIsEditing(!isEditing)} className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all flex items-center gap-1 ${isEditing ? 'bg-red-100 text-red-600 border-red-200' : 'bg-white text-gray-500 border-gray-200'}`}>
@@ -216,7 +194,6 @@ const BodyModule = ({ goBack, addXP }) => {
                </button>
             </div>
 
-            {/* 🔥 Custom Addition Panel */}
             {isEditing && (
               <div className="glass-card p-4 bg-emerald-50/80 border border-emerald-200 animate-fade-in">
                 <h4 className="text-xs font-bold text-emerald-700 uppercase mb-2">➕ Add to Library</h4>
@@ -225,7 +202,7 @@ const BodyModule = ({ goBack, addXP }) => {
                     <optgroup label="Food"><option value="carbs">🟡 Carbs</option><option value="protein">🔴 Protein</option><option value="veggie">🟢 Veggie</option><option value="fruit">🍎 Fruit</option></optgroup>
                     <optgroup label="Exercise"><option value="workout">🔵 Workout</option><option value="pilates">🧘 Pilates Move</option><option value="machine">🍑 Machine Move</option></optgroup>
                   </select>
-                  <input placeholder="Name (e.g. Quinoa)" value={newName} onChange={e=>setNewName(e.target.value)} className="flex-1 p-2 rounded-lg text-sm border-none shadow-sm"/>
+                  <input placeholder="Name" value={newName} onChange={e=>setNewName(e.target.value)} className="flex-1 p-2 rounded-lg text-sm border-none shadow-sm"/>
                   {['carbs','protein','veggie','fruit'].includes(newType) && (
                     <input placeholder="Cal" type="number" value={newCal} onChange={e=>setNewCal(e.target.value)} className="w-16 p-2 rounded-lg text-sm border-none shadow-sm"/>
                   )}
@@ -242,7 +219,6 @@ const BodyModule = ({ goBack, addXP }) => {
                     <h4 className="font-bold text-emerald-800 uppercase text-xs tracking-wider">{slot}</h4>
                     <span className="text-xs font-mono text-emerald-600">{calculateTotal(slot)} kcal</span>
                   </div>
-                  {/* List */}
                   <div className="space-y-2 mb-3">
                     {meals[slot].map(item => (
                       <div key={item.id} className="flex items-center gap-2 text-sm bg-white/60 p-2 rounded-lg">
@@ -254,7 +230,6 @@ const BodyModule = ({ goBack, addXP }) => {
                       </div>
                     ))}
                   </div>
-                  {/* Selector (Handles Add & Delete) */}
                   <div className="flex flex-wrap gap-2 pt-2 border-t border-emerald-100">
                     <span className="text-[10px] font-bold text-gray-400 uppercase w-full">Quick Add:</span>
                     {['carbs', 'protein', 'veggie', 'fruit'].map(catKey => library[catKey].map(f => (
@@ -269,7 +244,6 @@ const BodyModule = ({ goBack, addXP }) => {
                 </div>
               ))}
               
-              {/* Workout */}
               <div className="bg-emerald-50/50 p-4 rounded-xl border border-emerald-100 mb-4">
                 <h4 className="font-bold text-emerald-800 text-xs uppercase mb-2">🔥 Workout Types</h4>
                 <div className="flex flex-wrap gap-2 mb-4">
@@ -282,9 +256,9 @@ const BodyModule = ({ goBack, addXP }) => {
                   ))}
                 </div>
 
-                {/* Nested Routines */}
+                {/* 🔥 Logic Fixed Here: Show if Pilates/Machine selected OR Editing */}
                 {(showPilates || showMachine || isEditing) && (
-                  <div className="bg-white/50 p-3 rounded-lg border border-white/60">
+                  <div className="bg-white/50 p-3 rounded-lg border border-white/60 animate-fade-in">
                      <h5 className="text-[10px] font-bold text-emerald-600 uppercase mb-2 flex items-center gap-1"><CheckCircle size={10}/> Detailed Routine {isEditing && "(Edit Mode)"}</h5>
                      {(showPilates || isEditing) && (
                        <div className="mb-2">
@@ -353,7 +327,6 @@ const BodyModule = ({ goBack, addXP }) => {
           </div>
         </div>
       ) : (
-        // 📜 HISTORY VIEW
         <div className="max-w-4xl mx-auto space-y-4 animate-fade-in">
           {history.slice().reverse().map(log => (
             <div key={log.id} className="glass-card p-6 flex justify-between items-start">
@@ -377,7 +350,7 @@ const BodyModule = ({ goBack, addXP }) => {
 };
 
 // ==========================================
-// 🧠 Mind Protocol (Tabs Fix)
+// 🧠 Mind Protocol
 // ==========================================
 const MindModule = ({ goBack, addXP }) => {
   const theme = THEMES.mind;
