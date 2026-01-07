@@ -412,7 +412,18 @@ const MindModule = ({ goBack, addXP }) => {
       mediaRecorder.current = recorder;
       audioChunks.current = [];
       recorder.ondataavailable = e => { if(e.data.size > 0) audioChunks.current.push(e.data); };
-      recorder.onstop = () => { const blob = new Blob(audioChunks.current, {type: mimeType}); setInputs(p=>({...p, audioUrl: URL.createObjectURL(blob)})); };
+      recorder.onstop = () => { 
+        const blob = new Blob(audioChunks.current, { type: mimeType });
+        
+        // 创建一个文件读取器
+        const reader = new FileReader();
+        reader.readAsDataURL(blob); // 开始转换
+        
+        reader.onloadend = () => {
+          const base64Audio = reader.result; // 这就是可以永久保存的字符串数据
+          setInputs(p => ({ ...p, audioUrl: base64Audio })); 
+        };
+      };
       recorder.start(); setRecording(true);
     } catch(e) { alert("Mic Error: Check permissions"); }
   };
