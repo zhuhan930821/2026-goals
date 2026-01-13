@@ -2,10 +2,10 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   Dumbbell, Brain, Music, Bot, CheckSquare,
   BookOpen, AlertTriangle, Lightbulb, Mic, 
-  ChevronRight, ArrowLeft, Save, Plus, Settings,
+  ChevronRight, ChevronDown, ArrowLeft, Save, Plus, Settings,
   Search, Trash2, X, Play, Activity, Trophy, Sparkles, Zap, 
   Download, Upload, CheckCircle, Flame, Calendar, List, RotateCcw,
-  Home, Coffee, Feather, Code, PenTool, Sunrise, Smile
+  Home, Coffee, Feather, Code, PenTool, Sunrise, Smile, Circle, Disc
 } from 'lucide-react';
 import { LineChart, Line, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 
@@ -17,7 +17,6 @@ const THEMES = {
   mind: { bg: "from-blue-100/80 via-indigo-50/50 to-violet-100/80", btn: "bg-blue-600 hover:bg-blue-700", accent: "text-blue-700", light: "bg-blue-50 text-blue-800" },
   music: { bg: "from-amber-100/80 via-orange-50/50 to-yellow-100/80", btn: "bg-amber-600 hover:bg-amber-700", accent: "text-amber-700", light: "bg-amber-50 text-amber-800" },
   ai: { bg: "from-fuchsia-100/80 via-purple-50/50 to-pink-100/80", btn: "bg-fuchsia-600 hover:bg-fuchsia-700", accent: "text-fuchsia-700", light: "bg-fuchsia-50 text-fuchsia-800" },
-  // ✅ 新增 Habits 主题
   habits: { bg: "from-rose-100/80 via-red-50/50 to-orange-100/80", btn: "bg-rose-600 hover:bg-rose-700", accent: "text-rose-700", light: "bg-rose-50 text-rose-800" }
 };
 
@@ -43,6 +42,16 @@ const useGamification = () => {
   const progress = xp % 100;
   const addXP = (amount) => setXP(prev => prev + amount);
   return { xp, level, progress, addXP };
+};
+
+// 获取当前周数 (YYYY-Www)
+const getWeekKey = () => {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() + 4 - (d.getDay() || 7));
+  const yearStart = new Date(d.getFullYear(), 0, 1);
+  const weekNo = Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+  return `${d.getFullYear()}-W${weekNo}`;
 };
 
 // ==========================================
@@ -94,93 +103,181 @@ const DataManager = () => {
 };
 
 // ==========================================
-// ✅ Atomic Habits Module (已补全)
+// ✅ Atomic Habits Module (Updated: Weekly + Subtasks)
 // ==========================================
 const HabitsModule = ({ goBack, addXP }) => {
   const theme = THEMES.habits;
-  const todayStr = new Date().toLocaleDateString();
+  const currentWeek = getWeekKey();
 
-  // 习惯列表定义
+  // 默认习惯列表
   const HABIT_LIST = [
-    { id: 'h1', label: '扫地', icon: Home, cat: 'home' },
-    { id: 'h2', label: '拖地', icon: Sparkles, cat: 'home' },
-    { id: 'h3', label: '整理', icon: List, cat: 'home' },
-    { id: 'h4', label: '洗衣服', icon: Zap, cat: 'chore' },
-    { id: 'h5', label: '做饭', icon: Coffee, cat: 'chore' },
-    { id: 'h6', label: '冥想', icon: Sunrise, cat: 'mind' },
-    { id: 'h7', label: '记录灵感', icon: Feather, cat: 'mind' },
-    { id: 'h8', label: '开发新App', icon: Code, cat: 'work' },
-    { id: 'h9', label: '总结人生感想', icon: PenTool, cat: 'mind' },
+    { id: 'h1', label: '扫地', icon: Home },
+    { id: 'h2', label: '拖地', icon: Sparkles },
+    { id: 'h3', label: '整理', icon: List },
+    { id: 'h4', label: '洗衣服', icon: Zap },
+    { id: 'h5', label: '做饭', icon: Coffee },
+    { id: 'h6', label: '冥想', icon: Sunrise },
+    { id: 'h7', label: '记录灵感', icon: Feather },
+    { id: 'h8', label: '开发新App', icon: Code },
+    { id: 'h9', label: '总结人生感想', icon: PenTool },
   ];
 
-  // 状态管理
-  const [history, setHistory] = useStorage('lifeos_habits_history', []);
-  const [todayChecked, setTodayChecked] = useState(() => {
-    try {
-      const saved = localStorage.getItem('lifeos_habits_today');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (parsed.date === todayStr) return parsed.checked;
+  // 数据结构: { "2026-W3": { "h1": { done: bool, notes: str, subtasks: [{id, text, done}] } } }
+  const [weeksData, setWeeksData] = useStorage('lifeos_habits_weekly_v1', {});
+  const weekData = weeksData[currentWeek] || {};
+
+  // 展开/收起状态 (UI only)
+  const [expanded, setExpanded] = useState({});
+
+  const updateHabit = (id, field, val) => {
+    setWeeksData(prev => ({
+      ...prev,
+      [currentWeek]: {
+        ...prev[currentWeek],
+        [id]: { ...prev[currentWeek]?.[id], [field]: val }
       }
-      return [];
-    } catch { return []; }
-  });
-
-  useEffect(() => {
-    localStorage.setItem('lifeos_habits_today', JSON.stringify({ date: todayStr, checked: todayChecked }));
-  }, [todayChecked, todayStr]);
-
-  const toggleHabit = (id) => {
-    if (todayChecked.includes(id)) {
-      setTodayChecked(todayChecked.filter(h => h !== id));
-    } else {
-      setTodayChecked([...todayChecked, id]);
-      addXP(5);
-    }
+    }));
   };
 
-  const progress = Math.round((todayChecked.length / HABIT_LIST.length) * 100);
-
-  const calculateStreak = () => {
-    const uniqueDates = new Set(history.map(h => h.date));
-    return uniqueDates.size + (todayChecked.length > 0 && !history.find(h=>h.date===todayStr) ? 1 : 0);
+  const toggleMain = (id) => {
+    const isDone = weekData[id]?.done;
+    if (!isDone) addXP(10); // Reward for main completion
+    updateHabit(id, 'done', !isDone);
   };
 
-  const handleEndDay = () => {
-    if (todayChecked.length === 0) return alert("今天还没打卡呢！");
-    const existingIndex = history.findIndex(h => h.date === todayStr);
-    let newHistory = [...history];
-    if (existingIndex >= 0) {
-      newHistory[existingIndex] = { date: todayStr, completed: todayChecked, count: todayChecked.length };
-    } else {
-      newHistory = [{ date: todayStr, completed: todayChecked, count: todayChecked.length }, ...history];
-    }
-    setHistory(newHistory);
-    addXP(20); 
-    alert("✨ 今日习惯已归档！");
+  const addSubtask = (habitId, text) => {
+    if (!text.trim()) return;
+    const currentSubs = weekData[habitId]?.subtasks || [];
+    updateHabit(habitId, 'subtasks', [...currentSubs, { id: Date.now(), text, done: false }]);
   };
+
+  const toggleSubtask = (habitId, subId) => {
+    const currentSubs = weekData[habitId]?.subtasks || [];
+    updateHabit(habitId, 'subtasks', currentSubs.map(s => s.id === subId ? { ...s, done: !s.done } : s));
+  };
+
+  const deleteSubtask = (habitId, subId) => {
+    const currentSubs = weekData[habitId]?.subtasks || [];
+    updateHabit(habitId, 'subtasks', currentSubs.filter(s => s.id !== subId));
+  };
+
+  // 计算总进度
+  const completedCount = HABIT_LIST.filter(h => weekData[h.id]?.done).length;
+  const progress = Math.round((completedCount / HABIT_LIST.length) * 100);
 
   return (
     <div className={`min-h-screen bg-gradient-to-br ${theme.bg} p-4 pb-20 font-sans`}>
-      <Header title="Atomic Habits" icon={CheckSquare} theme={theme} goBack={goBack} />
-      <div className="max-w-xl mx-auto">
+      <Header title="Weekly Habits" icon={CheckSquare} theme={theme} goBack={goBack} />
+      
+      <div className="max-w-2xl mx-auto">
+        {/* Header Stats */}
         <div className="glass-card p-6 mb-6 flex items-center justify-between">
-          <div><div className="text-xs font-bold text-rose-800/50 uppercase tracking-widest mb-1">Daily Progress</div><div className="text-3xl font-black text-rose-700">{progress}%</div></div>
-          <div className="text-right"><div className="text-xs font-bold text-rose-800/50 uppercase tracking-widest mb-1">Total Days</div><div className="flex items-center gap-1 justify-end text-xl font-bold text-rose-600"><Flame size={18} fill="currentColor" /> {calculateStreak()}</div></div>
+          <div>
+            <div className="text-xs font-bold text-rose-800/50 uppercase tracking-widest mb-1 flex items-center gap-2">
+              <Calendar size={12}/> Current Week
+            </div>
+            <div className="text-3xl font-black text-rose-700">{currentWeek}</div>
+          </div>
+          <div className="text-right">
+             <div className="text-xs font-bold text-rose-800/50 uppercase tracking-widest mb-1">Weekly Goal</div>
+             <div className="flex items-center gap-1 justify-end text-xl font-bold text-rose-600">
+               {progress}% Done
+             </div>
+          </div>
         </div>
-        <div className="h-2 w-full bg-white/50 rounded-full mb-8 overflow-hidden"><div className="h-full bg-rose-500 transition-all duration-500 ease-out" style={{ width: `${progress}%` }}></div></div>
-        <div className="grid gap-3">
+
+        <div className="h-2 w-full bg-white/50 rounded-full mb-8 overflow-hidden">
+          <div className="h-full bg-rose-500 transition-all duration-500 ease-out" style={{ width: `${progress}%` }}></div>
+        </div>
+
+        {/* Habits List */}
+        <div className="space-y-4">
           {HABIT_LIST.map(habit => {
-            const isDone = todayChecked.includes(habit.id);
+            const data = weekData[habit.id] || {};
+            const isDone = data.done;
+            const isExpanded = expanded[habit.id];
+            const subtasks = data.subtasks || [];
+            const completedSubs = subtasks.filter(s => s.done).length;
+
             return (
-              <button key={habit.id} onClick={() => toggleHabit(habit.id)} className={`group flex items-center justify-between p-4 rounded-2xl border transition-all duration-200 active:scale-95 ${isDone ? 'bg-rose-500 border-rose-600 shadow-rose-200 shadow-lg' : 'bg-white/60 border-white/50 hover:bg-white'}`}>
-                <div className="flex items-center gap-4"><div className={`p-2 rounded-xl ${isDone ? 'bg-white/20 text-white' : 'bg-rose-100 text-rose-600'}`}><habit.icon size={20} /></div><span className={`font-bold text-lg ${isDone ? 'text-white' : 'text-gray-700'}`}>{habit.label}</span></div>
-                <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${isDone ? 'border-white bg-white text-rose-500' : 'border-gray-300'}`}>{isDone && <CheckCircle size={16} fill="currentColor" />}</div>
-              </button>
-            )
+              <div key={habit.id} className={`glass-card transition-all duration-300 border-l-4 ${isDone ? 'border-l-rose-500 bg-white/80' : 'border-l-transparent'}`}>
+                {/* Main Row */}
+                <div className="p-4 flex items-center justify-between cursor-pointer" onClick={() => setExpanded(p => ({...p, [habit.id]: !p[habit.id]}))}>
+                  <div className="flex items-center gap-4">
+                    <div onClick={(e) => { e.stopPropagation(); toggleMain(habit.id); }} 
+                         className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors ${isDone ? 'bg-rose-500 border-rose-500 text-white' : 'border-gray-300 hover:border-rose-400'}`}>
+                      {isDone && <CheckCircle size={16} />}
+                    </div>
+                    <div>
+                      <div className={`font-bold text-lg flex items-center gap-2 ${isDone ? 'text-gray-400 line-through' : 'text-gray-800'}`}>
+                        <habit.icon size={18} className={isDone ? 'text-gray-400' : 'text-rose-600'}/>
+                        {habit.label}
+                      </div>
+                      {subtasks.length > 0 && (
+                        <div className="text-xs text-gray-400 font-mono mt-0.5">
+                          {completedSubs}/{subtasks.length} steps completed
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <div className="text-gray-400">
+                    {isExpanded ? <ChevronDown size={20}/> : <ChevronRight size={20}/>}
+                  </div>
+                </div>
+
+                {/* Expanded Detail Area */}
+                {isExpanded && (
+                  <div className="px-4 pb-4 pt-0 animate-fade-in border-t border-gray-100 mt-2">
+                    
+                    {/* Notes Section */}
+                    <div className="mt-4 mb-4">
+                      <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1 block">Notes / Reflection</label>
+                      <textarea 
+                        className="w-full bg-rose-50/50 p-3 rounded-xl text-sm text-gray-700 border-none focus:ring-1 focus:ring-rose-300 resize-none"
+                        placeholder="Any updates or thoughts on this task?..."
+                        rows={2}
+                        value={data.notes || ''}
+                        onChange={(e) => updateHabit(habit.id, 'notes', e.target.value)}
+                      />
+                    </div>
+
+                    {/* Subtasks Section */}
+                    <div>
+                      <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2 block">Breakdown</label>
+                      <div className="space-y-2 mb-3">
+                        {subtasks.map(sub => (
+                          <div key={sub.id} className="flex items-center gap-2 group">
+                             <button onClick={() => toggleSubtask(habit.id, sub.id)} className={`text-gray-400 hover:text-rose-500 ${sub.done ? 'text-rose-500' : ''}`}>
+                               {sub.done ? <CheckCircle size={14}/> : <Circle size={14}/>}
+                             </button>
+                             <span className={`text-sm flex-1 ${sub.done ? 'text-gray-400 line-through' : 'text-gray-600'}`}>{sub.text}</span>
+                             <button onClick={() => deleteSubtask(habit.id, sub.id)} className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-400 transition-opacity">
+                               <X size={14}/>
+                             </button>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Plus size={16} className="text-rose-400"/>
+                        <input 
+                          className="bg-transparent text-sm w-full outline-none placeholder:text-gray-400"
+                          placeholder="Add a bullet point..."
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              addSubtask(habit.id, e.currentTarget.value);
+                              e.currentTarget.value = '';
+                            }
+                          }}
+                        />
+                      </div>
+                    </div>
+
+                  </div>
+                )}
+              </div>
+            );
           })}
         </div>
-        <button onClick={handleEndDay} className="w-full mt-8 bg-gray-900 text-white py-4 rounded-2xl font-bold shadow-xl flex justify-center gap-2 hover:bg-black transition-colors"><Save size={20}/> End & Archive Day (+20 XP)</button>
       </div>
     </div>
   );
@@ -711,7 +808,7 @@ const Dashboard = ({ setView, xp, level, progress }) => {
         
         {/* 🆕 Dashboard Grid with Habits */}
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-          <ModuleCard title="Atomic Habits" desc="Daily Checklist." icon={CheckSquare} theme={THEMES.habits} onClick={() => setView('habits')} />
+          <ModuleCard title="Atomic Habits" desc="Weekly Goals & Subtasks." icon={CheckSquare} theme={THEMES.habits} onClick={() => setView('habits')} />
           <ModuleCard title="Body OS" desc="Macros & Deficit." icon={Dumbbell} theme={THEMES.body} onClick={() => setView('body')} />
           <ModuleCard title="Mind Protocol" desc="Thoughts & Audio." icon={Brain} theme={THEMES.mind} onClick={() => setView('mind')} />
           <ModuleCard title="Music Band" desc="Practice & Projects." icon={Music} theme={THEMES.music} onClick={() => setView('music')} />
@@ -732,7 +829,6 @@ function App() {
     <>
       <style>{`.glass-card { background: rgba(255, 255, 255, 0.65); backdrop-filter: blur(20px); border: 1px solid rgba(255, 255, 255, 0.5); border-radius: 24px; box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.07); } .no-scrollbar::-webkit-scrollbar { display: none; } .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; } .animate-fade-in { animation: fadeIn 0.6s ease-out; } @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }`}</style>
       {view === 'dashboard' && <Dashboard setView={setView} xp={xp} level={level} progress={progress} />}
-      {/* 🆕 路由新增 */}
       {view === 'habits' && <HabitsModule goBack={()=>setView('dashboard')} addXP={addXP} />}
       {view === 'body' && <BodyModule goBack={()=>setView('dashboard')} addXP={addXP} />}
       {view === 'mind' && <MindModule goBack={()=>setView('dashboard')} addXP={addXP} />}
