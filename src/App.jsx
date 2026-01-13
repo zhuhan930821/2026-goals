@@ -5,7 +5,8 @@ import {
   ChevronRight, ChevronDown, ArrowLeft, Save, Plus, Settings,
   Search, Trash2, X, Play, Activity, Trophy, Sparkles, Zap, 
   Download, Upload, CheckCircle, Flame, Calendar, List, RotateCcw,
-  Home, Coffee, Feather, Code, PenTool, Sunrise, Smile, Circle, Disc
+  Home, Coffee, Feather, Code, PenTool, Sunrise, Smile, Circle, Disc,
+  ChevronLeft
 } from 'lucide-react';
 import { LineChart, Line, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 
@@ -44,14 +45,14 @@ const useGamification = () => {
   return { xp, level, progress, addXP };
 };
 
-// 获取当前周数 (YYYY-Www)
-const getWeekKey = () => {
-  const d = new Date();
+// ✅ 更新：支持传入日期来获取任意周的 key
+const getWeekKey = (date = new Date()) => {
+  const d = new Date(date);
   d.setHours(0, 0, 0, 0);
   d.setDate(d.getDate() + 4 - (d.getDay() || 7));
   const yearStart = new Date(d.getFullYear(), 0, 1);
   const weekNo = Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
-  return `${d.getFullYear()}-W${weekNo}`;
+  return `${d.getFullYear()}-W${String(weekNo).padStart(2, '0')}`;
 };
 
 // ==========================================
@@ -103,11 +104,19 @@ const DataManager = () => {
 };
 
 // ==========================================
-// ✅ Atomic Habits Module (Updated: Weekly + Subtasks)
+// ✅ Atomic Habits Module (Updated: Week Navigation)
 // ==========================================
 const HabitsModule = ({ goBack, addXP }) => {
   const theme = THEMES.habits;
-  const currentWeek = getWeekKey();
+  
+  // 🟢 新增：周切换逻辑
+  const [weekOffset, setWeekOffset] = useState(0); // 0 = 本周, -1 = 上周
+  
+  // 计算当前显示的周
+  const targetDate = new Date();
+  targetDate.setDate(targetDate.getDate() + (weekOffset * 7));
+  const displayWeek = getWeekKey(targetDate);
+  const isCurrentWeek = weekOffset === 0;
 
   // 默认习惯列表
   const HABIT_LIST = [
@@ -122,26 +131,25 @@ const HabitsModule = ({ goBack, addXP }) => {
     { id: 'h9', label: '总结人生感想', icon: PenTool },
   ];
 
-  // 数据结构: { "2026-W3": { "h1": { done: bool, notes: str, subtasks: [{id, text, done}] } } }
   const [weeksData, setWeeksData] = useStorage('lifeos_habits_weekly_v1', {});
-  const weekData = weeksData[currentWeek] || {};
+  const weekData = weeksData[displayWeek] || {}; // 读取选定周的数据
 
-  // 展开/收起状态 (UI only)
+  // 展开/收起状态
   const [expanded, setExpanded] = useState({});
 
   const updateHabit = (id, field, val) => {
     setWeeksData(prev => ({
       ...prev,
-      [currentWeek]: {
-        ...prev[currentWeek],
-        [id]: { ...prev[currentWeek]?.[id], [field]: val }
+      [displayWeek]: {
+        ...prev[displayWeek],
+        [id]: { ...prev[displayWeek]?.[id], [field]: val }
       }
     }));
   };
 
   const toggleMain = (id) => {
     const isDone = weekData[id]?.done;
-    if (!isDone) addXP(10); // Reward for main completion
+    if (!isDone && isCurrentWeek) addXP(10); // 只有在本周打卡才加分
     updateHabit(id, 'done', !isDone);
   };
 
@@ -171,18 +179,36 @@ const HabitsModule = ({ goBack, addXP }) => {
       
       <div className="max-w-2xl mx-auto">
         {/* Header Stats */}
-        <div className="glass-card p-6 mb-6 flex items-center justify-between">
-          <div>
-            <div className="text-xs font-bold text-rose-800/50 uppercase tracking-widest mb-1 flex items-center gap-2">
-              <Calendar size={12}/> Current Week
-            </div>
-            <div className="text-3xl font-black text-rose-700">{currentWeek}</div>
-          </div>
-          <div className="text-right">
-             <div className="text-xs font-bold text-rose-800/50 uppercase tracking-widest mb-1">Weekly Goal</div>
-             <div className="flex items-center gap-1 justify-end text-xl font-bold text-rose-600">
-               {progress}% Done
+        <div className="glass-card p-4 mb-6">
+          <div className="flex items-center justify-between mb-4">
+             {/* 🟢 Navigation Buttons */}
+             <div className="flex items-center gap-2 bg-white/50 p-1 rounded-lg">
+                <button onClick={() => setWeekOffset(p => p - 1)} className="p-2 hover:bg-white rounded-md text-rose-600 transition-colors"><ChevronLeft size={20}/></button>
+                <div className="font-mono font-bold text-rose-800 w-24 text-center">{displayWeek}</div>
+                <button onClick={() => setWeekOffset(p => p + 1)} className="p-2 hover:bg-white rounded-md text-rose-600 transition-colors"><ChevronRight size={20}/></button>
              </div>
+             
+             {/* Go to Today Button */}
+             {!isCurrentWeek && (
+               <button onClick={() => setWeekOffset(0)} className="text-xs bg-rose-100 text-rose-700 px-3 py-1.5 rounded-lg font-bold">
+                 Return to This Week
+               </button>
+             )}
+          </div>
+
+          <div className="flex items-end justify-between">
+            <div>
+              <div className="text-xs font-bold text-rose-800/50 uppercase tracking-widest mb-1 flex items-center gap-2">
+                {isCurrentWeek ? "🚀 Current Progress" : "📜 History View"}
+              </div>
+              <div className="text-3xl font-black text-rose-700">{progress}%</div>
+            </div>
+            <div className="text-right">
+               <div className="text-xs font-bold text-rose-800/50 uppercase tracking-widest mb-1">Status</div>
+               <div className="flex items-center gap-1 justify-end text-sm font-bold text-rose-600">
+                 {progress === 100 ? "Week Complete!" : `${completedCount}/${HABIT_LIST.length} Tasks`}
+               </div>
+            </div>
           </div>
         </div>
 
