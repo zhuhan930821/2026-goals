@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
-  Dumbbell, Brain, Music, Bot, 
+  Dumbbell, Brain, Music, Bot, CheckSquare,
   BookOpen, AlertTriangle, Lightbulb, Mic, 
   ChevronRight, ArrowLeft, Save, Plus, Settings,
   Search, Trash2, X, Play, Activity, Trophy, Sparkles, Zap, 
-  Download, Upload, CheckCircle, Flame, Calendar, List, RotateCcw
+  Download, Upload, CheckCircle, Flame, Calendar, List, RotateCcw,
+  Home, Coffee, Feather, Code, PenTool, Sunrise, Smile
 } from 'lucide-react';
 import { LineChart, Line, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 
@@ -15,7 +16,9 @@ const THEMES = {
   body: { bg: "from-emerald-100/80 via-teal-50/50 to-cyan-100/80", btn: "bg-emerald-600 hover:bg-emerald-700", accent: "text-emerald-700", light: "bg-emerald-50 text-emerald-800" },
   mind: { bg: "from-blue-100/80 via-indigo-50/50 to-violet-100/80", btn: "bg-blue-600 hover:bg-blue-700", accent: "text-blue-700", light: "bg-blue-50 text-blue-800" },
   music: { bg: "from-amber-100/80 via-orange-50/50 to-yellow-100/80", btn: "bg-amber-600 hover:bg-amber-700", accent: "text-amber-700", light: "bg-amber-50 text-amber-800" },
-  ai: { bg: "from-fuchsia-100/80 via-purple-50/50 to-pink-100/80", btn: "bg-fuchsia-600 hover:bg-fuchsia-700", accent: "text-fuchsia-700", light: "bg-fuchsia-50 text-fuchsia-800" }
+  ai: { bg: "from-fuchsia-100/80 via-purple-50/50 to-pink-100/80", btn: "bg-fuchsia-600 hover:bg-fuchsia-700", accent: "text-fuchsia-700", light: "bg-fuchsia-50 text-fuchsia-800" },
+  // ✅ 新增 Habits 主题
+  habits: { bg: "from-rose-100/80 via-red-50/50 to-orange-100/80", btn: "bg-rose-600 hover:bg-rose-700", accent: "text-rose-700", light: "bg-rose-50 text-rose-800" }
 };
 
 // ==========================================
@@ -87,6 +90,99 @@ const DataManager = () => {
         </div>
       )}
     </>
+  );
+};
+
+// ==========================================
+// ✅ Atomic Habits Module (已补全)
+// ==========================================
+const HabitsModule = ({ goBack, addXP }) => {
+  const theme = THEMES.habits;
+  const todayStr = new Date().toLocaleDateString();
+
+  // 习惯列表定义
+  const HABIT_LIST = [
+    { id: 'h1', label: '扫地', icon: Home, cat: 'home' },
+    { id: 'h2', label: '拖地', icon: Sparkles, cat: 'home' },
+    { id: 'h3', label: '整理', icon: List, cat: 'home' },
+    { id: 'h4', label: '洗衣服', icon: Zap, cat: 'chore' },
+    { id: 'h5', label: '做饭', icon: Coffee, cat: 'chore' },
+    { id: 'h6', label: '冥想', icon: Sunrise, cat: 'mind' },
+    { id: 'h7', label: '记录灵感', icon: Feather, cat: 'mind' },
+    { id: 'h8', label: '开发新App', icon: Code, cat: 'work' },
+    { id: 'h9', label: '总结人生感想', icon: PenTool, cat: 'mind' },
+  ];
+
+  // 状态管理
+  const [history, setHistory] = useStorage('lifeos_habits_history', []);
+  const [todayChecked, setTodayChecked] = useState(() => {
+    try {
+      const saved = localStorage.getItem('lifeos_habits_today');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.date === todayStr) return parsed.checked;
+      }
+      return [];
+    } catch { return []; }
+  });
+
+  useEffect(() => {
+    localStorage.setItem('lifeos_habits_today', JSON.stringify({ date: todayStr, checked: todayChecked }));
+  }, [todayChecked, todayStr]);
+
+  const toggleHabit = (id) => {
+    if (todayChecked.includes(id)) {
+      setTodayChecked(todayChecked.filter(h => h !== id));
+    } else {
+      setTodayChecked([...todayChecked, id]);
+      addXP(5);
+    }
+  };
+
+  const progress = Math.round((todayChecked.length / HABIT_LIST.length) * 100);
+
+  const calculateStreak = () => {
+    const uniqueDates = new Set(history.map(h => h.date));
+    return uniqueDates.size + (todayChecked.length > 0 && !history.find(h=>h.date===todayStr) ? 1 : 0);
+  };
+
+  const handleEndDay = () => {
+    if (todayChecked.length === 0) return alert("今天还没打卡呢！");
+    const existingIndex = history.findIndex(h => h.date === todayStr);
+    let newHistory = [...history];
+    if (existingIndex >= 0) {
+      newHistory[existingIndex] = { date: todayStr, completed: todayChecked, count: todayChecked.length };
+    } else {
+      newHistory = [{ date: todayStr, completed: todayChecked, count: todayChecked.length }, ...history];
+    }
+    setHistory(newHistory);
+    addXP(20); 
+    alert("✨ 今日习惯已归档！");
+  };
+
+  return (
+    <div className={`min-h-screen bg-gradient-to-br ${theme.bg} p-4 pb-20 font-sans`}>
+      <Header title="Atomic Habits" icon={CheckSquare} theme={theme} goBack={goBack} />
+      <div className="max-w-xl mx-auto">
+        <div className="glass-card p-6 mb-6 flex items-center justify-between">
+          <div><div className="text-xs font-bold text-rose-800/50 uppercase tracking-widest mb-1">Daily Progress</div><div className="text-3xl font-black text-rose-700">{progress}%</div></div>
+          <div className="text-right"><div className="text-xs font-bold text-rose-800/50 uppercase tracking-widest mb-1">Total Days</div><div className="flex items-center gap-1 justify-end text-xl font-bold text-rose-600"><Flame size={18} fill="currentColor" /> {calculateStreak()}</div></div>
+        </div>
+        <div className="h-2 w-full bg-white/50 rounded-full mb-8 overflow-hidden"><div className="h-full bg-rose-500 transition-all duration-500 ease-out" style={{ width: `${progress}%` }}></div></div>
+        <div className="grid gap-3">
+          {HABIT_LIST.map(habit => {
+            const isDone = todayChecked.includes(habit.id);
+            return (
+              <button key={habit.id} onClick={() => toggleHabit(habit.id)} className={`group flex items-center justify-between p-4 rounded-2xl border transition-all duration-200 active:scale-95 ${isDone ? 'bg-rose-500 border-rose-600 shadow-rose-200 shadow-lg' : 'bg-white/60 border-white/50 hover:bg-white'}`}>
+                <div className="flex items-center gap-4"><div className={`p-2 rounded-xl ${isDone ? 'bg-white/20 text-white' : 'bg-rose-100 text-rose-600'}`}><habit.icon size={20} /></div><span className={`font-bold text-lg ${isDone ? 'text-white' : 'text-gray-700'}`}>{habit.label}</span></div>
+                <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${isDone ? 'border-white bg-white text-rose-500' : 'border-gray-300'}`}>{isDone && <CheckCircle size={16} fill="currentColor" />}</div>
+              </button>
+            )
+          })}
+        </div>
+        <button onClick={handleEndDay} className="w-full mt-8 bg-gray-900 text-white py-4 rounded-2xl font-bold shadow-xl flex justify-center gap-2 hover:bg-black transition-colors"><Save size={20}/> End & Archive Day (+20 XP)</button>
+      </div>
+    </div>
   );
 };
 
@@ -382,12 +478,11 @@ const BodyModule = ({ goBack, addXP }) => {
 };
 
 // ==========================================
-// 🧠 Mind Protocol (修复：添加默认数据和显示逻辑)
+// 🧠 Mind Protocol
 // ==========================================
 const MindModule = ({ goBack, addXP }) => {
   const theme = THEMES.mind;
   const [activeTab, setActiveTab] = useState('reading');
-  // 🟢 修复：添加了一个演示用的默认数据，确保首次打开不显示全空
   const [entries, setEntries] = useStorage('lifeos_mind_v2', [
     { id: 1, type: 'mind', category: 'reading', date: 'Example', title: 'Welcome to Mind Protocol', excerpt: 'Start by logging your thoughts above.', thoughts: 'This system helps you track cognitive patterns.' }
   ]);
@@ -403,7 +498,7 @@ const MindModule = ({ goBack, addXP }) => {
   };
   const handleDelete = (id) => { if(window.confirm("Delete?")) setEntries(entries.filter(e => e.id !== id)); };
   
-  // Audio Logic
+  // Audio Logic (Fixed to use Base64)
   const startRec = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -412,18 +507,17 @@ const MindModule = ({ goBack, addXP }) => {
       mediaRecorder.current = recorder;
       audioChunks.current = [];
       recorder.ondataavailable = e => { if(e.data.size > 0) audioChunks.current.push(e.data); };
-      recorder.onstop = () => { 
+      
+      // ✅ 使用 FileReader 将 Blob 转为 Base64 字符串以持久保存
+      recorder.onstop = () => {
         const blob = new Blob(audioChunks.current, { type: mimeType });
-        
-        // 创建一个文件读取器
         const reader = new FileReader();
-        reader.readAsDataURL(blob); // 开始转换
-        
+        reader.readAsDataURL(blob); 
         reader.onloadend = () => {
-          const base64Audio = reader.result; // 这就是可以永久保存的字符串数据
-          setInputs(p => ({ ...p, audioUrl: base64Audio })); 
+           setInputs(p => ({ ...p, audioUrl: reader.result })); 
         };
       };
+      
       recorder.start(); setRecording(true);
     } catch(e) { alert("Mic Error: Check permissions"); }
   };
@@ -445,7 +539,6 @@ const MindModule = ({ goBack, addXP }) => {
           </div>
         </div>
         
-        {/* Input Area - Ensured Visibility */}
         <div className="glass-card p-6 mb-10 transition-all ring-4 ring-white/20">
            {activeTab === 'reading' && (
              <div className="space-y-4 animate-fade-in">
@@ -535,7 +628,6 @@ const MindModule = ({ goBack, addXP }) => {
 const MusicModule = ({ goBack, addXP }) => {
   const theme = THEMES.music;
   const [logs, setLogs] = useStorage('lifeos_music_logs', []);
-  // 🟢 修复：添加 'Theory' (乐理) 到默认乐器列表
   const [inst, setInst] = useState('Drums'); 
   const [dur, setDur] = useState(30); 
   const [note, setNote] = useState('');
@@ -549,7 +641,6 @@ const MusicModule = ({ goBack, addXP }) => {
         <div className="flex flex-wrap gap-4 items-end mb-8">
           <div>
             <label className="text-xs font-bold uppercase text-gray-500 mb-1 block">Inst/Type</label>
-            {/* 🟢 修复：下拉菜单添加了 Theory 选项 */}
             <select value={inst} onChange={e=>setInst(e.target.value)} className="block p-3 rounded-xl bg-white/50 w-36 border-none focus:ring-2 ring-amber-400 outline-none font-bold text-gray-700">
               <option>🥁 Drums</option>
               <option>🎹 Piano</option>
@@ -615,8 +706,17 @@ const Dashboard = ({ setView, xp, level, progress }) => {
           <div><h1 className="text-5xl font-black text-gray-900 tracking-tighter mb-2">2026 <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-purple-600">Life OS</span></h1><p className="text-gray-500 font-medium">Precision & Growth</p></div>
           <div className="flex items-center gap-4"><DataManager /><div className="glass-card px-5 py-3 flex items-center gap-4 rounded-full"><div className="text-right"><div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Lvl {level}</div><div className="text-sm font-black text-gray-800">{xp} XP</div></div><div className="w-10 h-10 rounded-full bg-gradient-to-tr from-yellow-400 to-orange-500 flex items-center justify-center shadow-lg text-white font-bold"><Trophy size={18}/></div></div></div>
         </header>
+        
         <div className="glass-card p-6 mb-8"><div className="flex justify-between items-center mb-4"><h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest flex items-center gap-2"><Zap size={14} className="text-yellow-500"/> Activity Flow</h3></div><div className="flex gap-1.5 overflow-x-auto pb-2">{heatmap.map((d, i) => (<div key={i} title={d.date} className={`w-8 h-12 rounded-lg flex-shrink-0 transition-all ${d.count===0?'bg-gray-100': d.count<2?'bg-blue-200':'bg-blue-600'}`}></div>))}</div></div>
-        <div className="grid md:grid-cols-2 gap-6"><ModuleCard title="Body OS" desc="Macros, Cals & Deficit." icon={Dumbbell} theme={THEMES.body} onClick={() => setView('body')} /><ModuleCard title="Mind Protocol" desc="Thoughts & Audio." icon={Brain} theme={THEMES.mind} onClick={() => setView('mind')} /><ModuleCard title="Music Band" desc="Practice & Projects." icon={Music} theme={THEMES.music} onClick={() => setView('music')} /><ModuleCard title="AI Lab" desc="Research." icon={Bot} theme={THEMES.ai} onClick={() => setView('ai')} /></div>
+        
+        {/* 🆕 Dashboard Grid with Habits */}
+        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <ModuleCard title="Atomic Habits" desc="Daily Checklist." icon={CheckSquare} theme={THEMES.habits} onClick={() => setView('habits')} />
+          <ModuleCard title="Body OS" desc="Macros & Deficit." icon={Dumbbell} theme={THEMES.body} onClick={() => setView('body')} />
+          <ModuleCard title="Mind Protocol" desc="Thoughts & Audio." icon={Brain} theme={THEMES.mind} onClick={() => setView('mind')} />
+          <ModuleCard title="Music Band" desc="Practice & Projects." icon={Music} theme={THEMES.music} onClick={() => setView('music')} />
+          <ModuleCard title="AI Lab" desc="Research." icon={Bot} theme={THEMES.ai} onClick={() => setView('ai')} />
+        </div>
       </div>
     </div>
   );
@@ -632,6 +732,8 @@ function App() {
     <>
       <style>{`.glass-card { background: rgba(255, 255, 255, 0.65); backdrop-filter: blur(20px); border: 1px solid rgba(255, 255, 255, 0.5); border-radius: 24px; box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.07); } .no-scrollbar::-webkit-scrollbar { display: none; } .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; } .animate-fade-in { animation: fadeIn 0.6s ease-out; } @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }`}</style>
       {view === 'dashboard' && <Dashboard setView={setView} xp={xp} level={level} progress={progress} />}
+      {/* 🆕 路由新增 */}
+      {view === 'habits' && <HabitsModule goBack={()=>setView('dashboard')} addXP={addXP} />}
       {view === 'body' && <BodyModule goBack={()=>setView('dashboard')} addXP={addXP} />}
       {view === 'mind' && <MindModule goBack={()=>setView('dashboard')} addXP={addXP} />}
       {view === 'music' && <MusicModule goBack={()=>setView('dashboard')} addXP={addXP} />}
